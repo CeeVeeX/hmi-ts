@@ -1,0 +1,46 @@
+{
+  "name": "@hmi-ts/protocol",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "hmi-ts",
+  "author": "Cee Vee X <ceeveex@hotmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/ceeveex/hmi-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceeveex/hmi-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ceeveex/hmi-ts/issues"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target es2022 --dts --clean",
+    "dev": "tsup src/index.ts --format esm --target es2022 --dts --watch",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.8"
+  },
+  "keywords": [
+    "async",
+    "typescript",
+    "esm",
+    "shared"
+  ]
+}

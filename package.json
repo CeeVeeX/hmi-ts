@@ -1,0 +1,59 @@
+{
+  "name": "hmi-ts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.1",
+  "description": "适用于 Web HMI 的 工具集",
+  "author": "Cee Vee X <ceeveex@hotmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/ceeveex/hmi-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ceeveex/hmi-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ceeveex/hmi-ts/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel --filter=!@hmi-ts/node-tcp-example --filter=!@hmi-ts/node-udp-example --filter=!@hmi-ts/browser-example",
+    "dev:node-tcp-example": "pnpm --filter @hmi-ts/node-tcp-example dev",
+    "dev:node-udp-example": "pnpm --filter @hmi-ts/node-udp-example dev",
+    "dev:browser-example": "pnpm --filter @hmi-ts/browser-example dev",
+    "dev:all": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:coverage": "vitest run --coverage",
+    "coverage:open": "node scripts/open-coverage.mjs",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write ."
+  },
+  "lint-staged": {
+    "{apps,packages,src,test}/**/*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "{README.md,package.json,pnpm-workspace.yaml,tsconfig.json,tsconfig.base.json,turbo.json,.prettierrc.json}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.8.1",
+    "@vitest/coverage-v8": "^4.0.8",
+    "eslint": "^9.37.0",
+    "globals": "^17.6.0",
+    "lint-staged": "^16.1.6",
+    "prettier": "^3.6.2",
+    "tsdown": "^0.21.10",
+    "tsdown-stale-guard": "^0.1.1",
+    "tsup": "^8.5.0",
+    "turbo": "^2.9.18",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.0.8"
+  }
+}

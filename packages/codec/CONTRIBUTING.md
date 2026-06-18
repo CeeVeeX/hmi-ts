@@ -1,0 +1,1 @@
+# Contributing: @hmi-ts/client
