@@ -1,4 +1,4 @@
-import type { ReadOptions, Subscription } from '@hmi-ts/core'
+import type { PacketFactory, ReadOptions, Subscription } from '@hmi-ts/core'
 import { areArraysEqual, sleep } from '@hmi-ts/utils'
 
 /**
@@ -41,7 +41,7 @@ export interface MergedRange {
 export interface PollGroup {
   interval: number
   subscriptions: Map<string, SubscriptionGroup>
-  mergedRanges: MergedRange[]
+  mergedRanges: ReadOptions[]
   running: boolean
 }
 
@@ -51,11 +51,12 @@ export interface PollGroup {
  * @example
  * ```ts
  * const options: SubscriptionEngineOptions = {
- *   readRegisters: async ({ unitId, start, length }) => [unitId, start, length],
+ *   read: async (options: ReadOptions) => number[],
  * }
  * ```
  */
 export interface SubscriptionEngineOptions {
+  packetFactory: PacketFactory
   read: (options: ReadOptions) => Promise<number[]>
   onError?: (error: Error) => void
 }
@@ -96,6 +97,8 @@ export class SubscriptionEngine {
 
     const group = this.ensureGroup(sub.interval)
     group.subscriptions.set(id, sub)
+    // TODO: mergeSubscriptions 可能要放到报文库里实现
+    // MergedRange 改成 ReadOptions
     group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
 
     return () => {
@@ -218,16 +221,13 @@ export class SubscriptionEngine {
     group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
 
     for (const range of group.mergedRanges) {
-      const values = await this.options.readRegisters({
-        unitId: range.unitId,
-        start: range.start,
-        length: range.length,
-      })
+      const values = await this.options.read(range)
 
       for (const sub of group.subscriptions.values()) {
         if (sub.unitId !== range.unitId) {
           continue
         }
+
         if (sub.start < range.start || sub.start + sub.length > range.start + range.length) {
           continue
         }

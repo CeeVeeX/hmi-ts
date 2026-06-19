@@ -3,11 +3,12 @@ import {
   ConnectionClosedError,
   ProtocolError,
   type IResponse,
-  type ReadOptions,
+  type PacketFactory,
+  type BaseReadOptions,
   type RequestTask,
   type SubscribeOptions,
   type Transport,
-  type WriteOptions,
+  type BaseWriteOptions,
 } from '@hmi-ts/core'
 import {
   decodeResponseByMode,
@@ -26,14 +27,16 @@ import { SubscriptionEngine } from '@hmi-ts/subscription'
 export interface ClientEvent {
   connect: () => void
   disconnect: (error?: Error) => void
-  timeout: () => void
+  timeout: (error: Error) => void
   error: (error: Error) => void
 }
 
-export interface ClientOptions {
+export interface ClientOptions<T> {
+  packetFactory: T
   transport: Transport
   defaultUnitId?: number
   defaultTimeout?: number
+  defaultInterval?: number
 }
 
 interface InFlight {
@@ -42,12 +45,12 @@ interface InFlight {
   reject: (error: Error) => void
 }
 
-export class Client extends EventEmitter<ClientEvent> {
+export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   private scheduler = new RequestScheduler()
   private sequence = 0
   private subscriptionEngine: SubscriptionEngine
   private inFlight: InFlight | null = null
-  constructor(private readonly options: ClientOptions) {
+  constructor(private readonly options: ClientOptions<T>) {
     super()
 
     const transportAny = options.transport as Transport & {
@@ -87,6 +90,8 @@ export class Client extends EventEmitter<ClientEvent> {
     })
 
     this.subscriptionEngine = new SubscriptionEngine({
+      packetFactory: options.packetFactory,
+      // 提供给订阅轮询用
       read: (options) => this.read(options),
       onError: (error) => this.emit('error', error),
     })
@@ -120,17 +125,94 @@ export class Client extends EventEmitter<ClientEvent> {
     await this.options.transport.close()
   }
 
-  async write(options: WriteOptions) {
+  async write(options: Parameters<T['encodeWrite']>[0]) {
     const tx = this.nextTx()
+    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+
+    // 构建帧
+    const frame = this.options.packetFactory.encodeWrite(options)
+
+    // 安排请求并等待响应
+    const response = await this.scheduleRequest({
+      id: tx,
+      priority: options?.priority ?? PRIORITY.write,
+      timeout,
+      execute: () => this.performRequest(tx, frame),
+      resolve: () => {},
+      reject: () => {},
+    })
+
+    if (!response.success) {
+      throw new ProtocolError(`modbus exception ${response.exceptionCode}`)
+    }
   }
 
-  async read(options: ReadOptions): Promise<number[]> {
+  async read(options: Parameters<T['encodeRead']>[0]): Promise<number[]> {
     const tx = this.nextTx()
+    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
-    return []
+    // 构建帧
+    const frame: Uint8Array = this.options.packetFactory.encodeRead(options)
+
+    // 安排请求并等待响应
+    const response = await this.scheduleRequest({
+      id: tx,
+      priority: options?.priority ?? PRIORITY.read,
+      timeout,
+      execute: () => this.performRequest(tx, frame),
+      resolve: () => {},
+      reject: () => {},
+    })
+
+    if (!response.success) {
+      throw new ProtocolError(`exception ${response.exceptionCode}`)
+    }
+    return response.registers ?? []
   }
 
-  subscribe(options: SubscribeOptions) {}
+  subscribe(options: SubscribeOptions & Parameters<T['encodeRead']>[0]) {
+    // 报文合并必须满足, unitId 一致, interval 一致
+    // subscriptionEngine 里实现了报文合并功能
+    return this.subscriptionEngine.subscribe({
+      unitId: options.unitId ?? this.options.defaultUnitId ?? 1,
+      start: params.start,
+      length: params.length,
+      interval: options.interval ?? this.options.defaultInterval ?? 1000,
+      callback: options.callback,
+    })
+  }
+
+  private async scheduleRequest(task: RequestTask<IResponse>): Promise<IResponse> {
+    try {
+      return await this.scheduler.schedule(task)
+    } catch (error) {
+      // 调度器把超时作为普通异常抛出；这里统一转成客户端 timeout 事件，
+      // 让上层既能捕获异常，也能通过事件做监控或告警。
+      if ((error as Error).name === 'TimeoutError') {
+        this.emit('timeout', error as Error)
+      }
+      throw error
+    }
+  }
+
+  private async performRequest(tx: number, frame: Uint8Array): Promise<IResponse> {
+    return new Promise<IResponse>((resolve, reject) => {
+      // 当前客户端假设“单连接串行请求”：任何时刻仅保留一个 inFlight。
+      // 该约束由 RequestScheduler 保证，避免响应乱序匹配。
+      this.inFlight = {
+        tx,
+        resolve,
+        reject,
+      }
+
+      void this.options.transport.send(frame).catch((error) => {
+        this.inFlight = null
+        reject(error as Error)
+      })
+    })
+  }
 
   private nextTx(): number {
     // transactionId 按 16 位递增循环；0 常留作未初始化/保留值，这里跳过。
