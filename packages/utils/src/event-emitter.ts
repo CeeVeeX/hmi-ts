@@ -55,15 +55,17 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
    *
    * Example:
    * ```typescript
-   * emitter.on('user-login', (username, userId) => {
+   * const off = emitter.on('user-login', (username, userId) => {
    *   console.log(`User ${username} with ID ${userId} logged in`);
    * });
+   * // To remove the listener later, call the returned function
+   * off();
    * ```
    */
   on<U extends keyof ExtendedListenerSignature<L>>(
     event: U,
     listener: ExtendedListenerSignature<L>[U],
-  ): this {
+  ): () => void {
     // Initialize an empty array for listeners if not already set
     if (!this.events[event]) {
       this.events[event] = []
@@ -72,7 +74,9 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.events[event]!.push(listener as any)
 
-    return this
+    return () => {
+      this.off(event, listener)
+    }
   }
 
   /**
@@ -92,7 +96,7 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
   once<U extends keyof ExtendedListenerSignature<L>>(
     event: U,
     listener: ExtendedListenerSignature<L>[U],
-  ): this {
+  ): void {
     // Create a wrapper listener that removes itself after being invoked
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const _wrapper = (...args: any[]): void => {
@@ -103,8 +107,6 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
 
     // Register the wrapper listener
     this.on(event, _wrapper as ExtendedListenerSignature<L>[U])
-
-    return this
   }
 
   /**
@@ -156,13 +158,14 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
   off<U extends keyof ExtendedListenerSignature<L>>(
     event: U,
     listener: ExtendedListenerSignature<L>[U],
-  ): this {
+  ): boolean {
     // If the event has listeners, filter out the listener to remove it
     if (this.events[event]) {
       this.events[event] = this.events[event]!.filter((l) => l !== listener)
+      return true
     }
 
-    return this
+    return false
   }
 
   /**
@@ -174,11 +177,9 @@ export class EventEmitter<L extends ListenerSignature<L> = DefaultListener> {
    * emitter.offAll(); // Removes all listeners for all events
    * ```
    */
-  offAll(): this {
+  offAll(): void {
     // Clear the events registry completely
     this.events = {}
-
-    return this
   }
 }
 
