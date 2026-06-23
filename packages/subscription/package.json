@@ -32,6 +32,10 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@hmi-ts/core": "workspace:*",
+    "@hmi-ts/utils": "workspace:*"
+  },
   "devDependencies": {
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",

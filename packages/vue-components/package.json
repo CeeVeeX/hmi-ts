@@ -2,7 +2,7 @@
   "name": "@hmi-ts/vue-components",
   "version": "0.0.1",
   "type": "module",
-  "description": "hmi-ts",
+  "description": "Vue 3 component library for hmi-ts",
   "author": "Cee Vee X <ceeveex@hotmail.com>",
   "license": "MIT",
   "homepage": "https://github.com/ceeveex/hmi-ts#readme",
@@ -13,34 +13,51 @@
   "bugs": {
     "url": "https://github.com/ceeveex/hmi-ts/issues"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --target es2022 --dts --clean",
-    "dev": "tsup src/index.ts --format esm --target es2022 --dts --watch",
-    "lint": "eslint src --ext .ts",
-    "test": "vitest run --passWithNoTests",
+    "build": "vite build && pnpm run build:types",
+    "build:types": "vue-tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir dist",
+    "dev": "pnpm run build:types && concurrently \"pnpm run dev:bundle\" \"pnpm run dev:types\"",
+    "dev:bundle": "vite build --watch --emptyOutDir false",
+    "dev:types": "vue-tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir dist --watch",
+    "lint": "eslint src --ext .ts,.vue",
+    "test": "vitest run --passWithNoTests -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
   "devDependencies": {
-    "tsup": "^8.5.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "concurrently": "^9.2.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.0.8"
+    "vite": "^8.0.9",
+    "vitest": "^4.0.8",
+    "vue": "^3.5.0",
+    "vue-tsc": "^2.1.10"
   },
   "keywords": [
-    "async",
-    "typescript",
-    "esm",
-    "shared"
+    "vue",
+    "vue3",
+    "components",
+    "hmi-ts"
   ]
 }
