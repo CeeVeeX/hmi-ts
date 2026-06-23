@@ -20,8 +20,8 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel --filter=!@hmi-ts/node-tcp-example --filter=!@hmi-ts/node-udp-example --filter=!@hmi-ts/browser-example --filter=!@hmi-ts/vue-example",
-    "dev:node-tcp-example": "pnpm --filter @hmi-ts/node-tcp-example dev",
+    "dev": "turbo run dev --parallel --filter=!@hmi-ts/tcp-example --filter=!@hmi-ts/vue-example --filter=!@hmi-ts/vue-components",
+    "dev:tcp-example": "pnpm --filter @hmi-ts/tcp-example dev",
     "dev:node-udp-example": "pnpm --filter @hmi-ts/node-udp-example dev",
     "dev:browser-example": "pnpm --filter @hmi-ts/browser-example dev",
     "dev:vue-example": "pnpm --filter @hmi-ts/vue-example dev",

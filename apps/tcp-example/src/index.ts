@@ -2,6 +2,19 @@ import 'dotenv/config'
 import { Client } from '@hmi-ts/client'
 import { decodeAsciiString, encodeAsciiString } from '@hmi-ts/codec'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
+import { ModbusTcpPacketFactory } from '@hmi-ts/msg-modbus-tcp'
+
+// client.connect() 错误后，延迟一秒再次尝试连接
+function retryConnect(client: Client<any>, delayMs = 1000): void {
+  setTimeout(async () => {
+    try {
+      await client.connect()
+    } catch {
+      console.error('connect failed, retrying in', delayMs, 'ms')
+      retryConnect(client, delayMs)
+    }
+  }, delayMs)
+}
 
 async function main(): Promise<void> {
   const host = process.env.MODBUS_HOST ?? '127.0.0.1'
@@ -15,6 +28,7 @@ async function main(): Promise<void> {
   })
 
   const client = new Client({
+    packetFactory: new ModbusTcpPacketFactory(),
     transport,
     defaultUnitId: 1,
     defaultTimeout: 1000,
@@ -25,49 +39,9 @@ async function main(): Promise<void> {
   client.on('error', (err) => console.error('error', err))
 
   try {
-    await client.connect()
+    setInterval(() => {}, 9999)
 
-    const regs = await client.readHoldingRegisters(0, 4)
-    console.log('read result:', regs)
-
-    const inputRegs = await client.readInputRegisters(0, 4)
-    console.log('read input registers:', inputRegs)
-
-    const coils = await client.readCoils(0, 8)
-    console.log('read coils:', coils)
-
-    const discreteInputs = await client.readDiscreteInputs(0, 8)
-    console.log('read discrete inputs:', discreteInputs)
-
-    await client.writeSingleRegister(0, Math.floor(Math.random() * 100))
-    console.log('write single done')
-
-    await client.writeSingleCoil(1, true)
-    console.log('write single coil done')
-
-    await client.writeMultipleCoils(2, [true, false, true, true])
-    console.log('write multiple coils done')
-
-    const asciiStart = 100
-    const asciiText = 'HELLO'
-    const asciiRegs = encodeAsciiString(asciiText, { padByte: 0x20 })
-    await client.writeMultipleRegisters(asciiStart, asciiRegs)
-    const asciiReadRegs = await client.readHoldingRegisters(asciiStart, asciiRegs.length)
-    console.log('ascii write/read regs:', asciiReadRegs)
-    console.log('ascii decoded text:', decodeAsciiString(asciiReadRegs))
-
-    const unsubscribe = client.subscribe({
-      start: 0,
-      length: 2,
-      interval: 500,
-      callback: (values) => console.log('subscription update:', values),
-    })
-
-    setTimeout(async () => {
-      unsubscribe()
-      await client.close()
-      console.log('Demo completed successfully!')
-    }, 5000)
+    retryConnect(client)
   } catch (error) {
     console.error('\n❌ Demo failed:')
     console.error(error instanceof Error ? error.message : error)

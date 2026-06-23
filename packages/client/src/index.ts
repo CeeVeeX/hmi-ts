@@ -40,10 +40,6 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   constructor(private readonly options: ClientOptions<T>) {
     super()
 
-    const transportAny = options.transport as Transport & {
-      onConnect?: (cb: () => void) => void
-    }
-
     // options.transport.onData((data) => {
     //   try {
     //     // 解析响应
@@ -62,18 +58,17 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     //   }
     // })
 
-    options.transport.onClose((error) => {
+    options.transport.on('connect', () => {
+      this.emit('connect')
+    })
+
+    options.transport.on('disconnect', (error) => {
       this.scheduler.clearPending(new ConnectionClosedError())
       if (this.inFlight) {
         this.inFlight.reject(new ConnectionClosedError())
         this.inFlight = null
       }
       this.emit('disconnect', error)
-    })
-
-    transportAny.onConnect?.(() => {
-      this.emit('connect')
-      this.subscriptionEngine.start()
     })
 
     this.subscriptionEngine = new SubscriptionEngine({
@@ -95,7 +90,6 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   async connect(): Promise<void> {
     await this.options.transport.connect()
     this.subscriptionEngine.start()
-    this.emit('connect')
   }
 
   /**

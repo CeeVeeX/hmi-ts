@@ -1,5 +1,11 @@
 import net from 'node:net'
-import { ConnectionClosedError, TransportError, type Transport } from '@hmi-ts/core'
+import {
+  ConnectionClosedError,
+  TransportError,
+  type Transport,
+  type TransportEvent,
+} from '@hmi-ts/core'
+import { EventEmitter } from '@hmi-ts/utils'
 
 /**
  * TCP 传输配置。
@@ -52,11 +58,8 @@ export type ConnectCallback = () => void
  * await transport.send(Uint8Array.from([0x00, 0x01]))
  * ```
  */
-export class TcpTransport implements Transport {
+export class TcpTransport extends EventEmitter<TransportEvent> implements Transport {
   private socket: net.Socket | null = null
-  private dataCallbacks: DataCallback[] = []
-  private closeCallbacks: CloseCallback[] = []
-  private connectCallbacks: ConnectCallback[] = []
   private receiveBuffer = Buffer.alloc(0)
   private manualClose = false
   private reconnectDelay: number
@@ -64,6 +67,7 @@ export class TcpTransport implements Transport {
   private connecting = false
 
   constructor(private readonly options: TcpTransportOptions) {
+    super()
     this.reconnectDelay = options.reconnectDelayMs ?? 300
   }
 
@@ -74,8 +78,12 @@ export class TcpTransport implements Transport {
 
     this.connecting = true
     this.manualClose = false
-    await this.openSocket()
-    this.connecting = false
+    try {
+      await this.openSocket()
+    } finally {
+      // 不管成功、失败、抛错，一定解锁
+      this.connecting = false
+    }
   }
 
   async close(): Promise<void> {
@@ -111,18 +119,6 @@ export class TcpTransport implements Transport {
         resolve()
       })
     })
-  }
-
-  onData(cb: (data: Uint8Array) => void): void {
-    this.dataCallbacks.push(cb)
-  }
-
-  onClose(cb: (err?: Error) => void): void {
-    this.closeCallbacks.push(cb)
-  }
-
-  onConnect(cb: ConnectCallback): void {
-    this.connectCallbacks.push(cb)
   }
 
   private async openSocket(): Promise<void> {
@@ -165,7 +161,7 @@ export class TcpTransport implements Transport {
 
     this.socket = socket
     this.reconnectDelay = this.options.reconnectDelayMs ?? 300
-    this.connectCallbacks.forEach((cb) => cb())
+    this.emit('connect')
   }
 
   private onSocketData(chunk: Buffer): void {
@@ -182,7 +178,7 @@ export class TcpTransport implements Transport {
       const frame = this.receiveBuffer.subarray(0, frameLength)
       this.receiveBuffer = this.receiveBuffer.subarray(frameLength)
       const payload = new Uint8Array(frame.buffer, frame.byteOffset, frame.byteLength)
-      this.dataCallbacks.forEach((cb) => cb(payload))
+      this.emit('data', payload)
     }
   }
 
@@ -204,6 +200,7 @@ export class TcpTransport implements Transport {
   }
 
   private emitClose(err?: Error): void {
-    this.closeCallbacks.forEach((cb) => cb(err))
+    this.emit('error', err ?? new ConnectionClosedError())
+    this.emit('disconnect', err)
   }
 }

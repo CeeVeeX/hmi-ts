@@ -59,6 +59,9 @@ importers:
       '@hmi-ts/codec':
         specifier: workspace:*
         version: link:../../packages/codec
+      '@hmi-ts/msg-modbus-tcp':
+        specifier: workspace:*
+        version: link:../../packages/msg-modbus-tcp
       '@hmi-ts/transport-tcp':
         specifier: workspace:*
         version: link:../../packages/transport-tcp

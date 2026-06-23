@@ -1,3 +1,5 @@
+import { EventEmitter } from '@hmi-ts/utils'
+
 /**
  * 连接状态枚举，用于描述传输层生命周期。
  *
@@ -14,6 +16,13 @@ export type ConnectionState =
   | 'closed'
   | 'reconnecting'
 
+export interface TransportEvent {
+  connect: () => void
+  disconnect: (error?: Error) => void
+  data: (data: Uint8Array) => void
+  error: (error: Error) => void
+}
+
 /**
  * 传输层统一接口。
  *
@@ -25,12 +34,10 @@ export type ConnectionState =
  * }
  * ```
  */
-export interface Transport {
+export interface Transport extends EventEmitter<TransportEvent> {
   connect(): Promise<void>
   close(): Promise<void>
   send(data: Uint8Array): Promise<void>
-  onData(cb: (data: Uint8Array) => void): void
-  onClose(cb: (err?: Error) => void): void
 }
 
 export interface PacketFactory {
