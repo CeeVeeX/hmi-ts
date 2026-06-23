@@ -5,7 +5,7 @@ import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { ModbusTcpPacketFactory } from '@hmi-ts/msg-modbus-tcp'
 
 // client.connect() 错误后，延迟一秒再次尝试连接
-function retryConnect(client: Client<any>, delayMs = 1000): void {
+function retryConnect(client: Client<ModbusTcpPacketFactory>, delayMs = 1000): void {
   setTimeout(async () => {
     try {
       await client.connect()

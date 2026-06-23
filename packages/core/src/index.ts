@@ -35,6 +35,10 @@ export interface TransportEvent {
  * ```
  */
 export interface Transport extends EventEmitter<TransportEvent> {
+  // TODO: 考虑区分 断开/销毁/重连
+  // 断开 (disconnect) 仅关闭 socket，保留实例，可再次 connect()
+  // 销毁 (close) 彻底释放资源，实例不可再用
+  // 重连 (reconnect) 断开后立即尝试 connect()
   connect(): Promise<void>
   close(): Promise<void>
   send(data: Uint8Array): Promise<void>
