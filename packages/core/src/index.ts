@@ -33,6 +33,13 @@ export interface Transport {
   onClose(cb: (err?: Error) => void): void
 }
 
+export interface PacketFactory {
+  encodeRead(options: BaseReadOptions): Uint8Array
+  encodeWrite(options: BaseWriteOptions): Uint8Array
+  mergeRead(options: BaseReadOptions[]): BaseReadOptions[]
+  decodeResponse(data: Uint8Array): IResponse
+}
+
 /**
  * 标准化请求描述，用于中间层或日志模块。
  * ```
@@ -175,16 +182,21 @@ export class TransportError extends Error {
 }
 
 export interface CommonOptions {
+  start: number
   unitId?: number
   timeout?: number
   priority?: number
 }
 
-export interface WriteOptions extends CommonOptions {}
+export interface BaseWriteOptions extends CommonOptions {
+  value: number | number[] | boolean | boolean[]
+}
 
-export interface ReadOptions extends CommonOptions {}
+export interface BaseReadOptions extends CommonOptions {
+  length: number
+}
 
-export interface SubscribeOptions extends CommonOptions {
+export interface SubscribeOptions {
   interval?: number
   callback: (registers: number[]) => void
 }
