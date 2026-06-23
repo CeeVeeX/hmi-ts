@@ -32,12 +32,19 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@hmi-ts/core": "workspace:*"
+  },
   "devDependencies": {
+    "@types/node": "^24.8.1",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.8"
   },
   "keywords": [
+    "transport",
+    "tcp",
+    "socket",
     "async",
     "typescript",
     "esm",

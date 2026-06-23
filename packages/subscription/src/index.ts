@@ -1,4 +1,4 @@
-import type { PacketFactory, ReadOptions, Subscription } from '@hmi-ts/core'
+import type { PacketFactory, ReadOptions, SubscribeOptions, Subscription } from '@hmi-ts/core'
 import { areArraysEqual, sleep } from '@hmi-ts/utils'
 
 /**
@@ -12,7 +12,9 @@ import { areArraysEqual, sleep } from '@hmi-ts/utils'
  * }
  * ```
  */
-export interface SubscriptionGroup extends Subscription {
+export interface SubscriptionGroup extends SubscribeOptions {
+  id: string
+  interval: number
   lastData?: number[]
 }
 
@@ -88,10 +90,11 @@ export class SubscriptionEngine {
 
   constructor(private readonly options: SubscriptionEngineOptions) {}
 
-  subscribe(params: Omit<Subscription, 'id'>): () => void {
+  subscribe(params: SubscribeOptions): () => void {
     const id = `sub-${++this.seq}`
     const sub: SubscriptionGroup = {
       ...params,
+      interval: params.interval ?? 100,
       id,
     }
 
@@ -99,11 +102,11 @@ export class SubscriptionEngine {
     group.subscriptions.set(id, sub)
     // TODO: mergeSubscriptions 可能要放到报文库里实现
     // MergedRange 改成 ReadOptions
-    group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
+    group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
 
     return () => {
       group.subscriptions.delete(id)
-      group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
+      group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
     }
   }
 

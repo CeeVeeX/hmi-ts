@@ -112,14 +112,14 @@ export interface RequestTask<T = unknown> {
  * }
  * ```
  */
-export interface Subscription {
-  id: string
-  unitId: number
-  start: number
-  length: number
-  interval: number
-  callback: (registers: number[]) => void
-}
+// export interface Subscription {
+//   id: string
+//   unitId: number
+//   start: number
+//   length: number
+//   interval: number
+//   callback: (registers: number[]) => void
+// }
 
 /**
  * 请求超时异常。
@@ -196,7 +196,7 @@ export interface BaseReadOptions extends CommonOptions {
   length: number
 }
 
-export interface SubscribeOptions {
+export interface SubscribeOptions extends BaseReadOptions {
   interval?: number
   callback: (registers: number[]) => void
 }

@@ -4,23 +4,10 @@ import {
   ProtocolError,
   type IResponse,
   type PacketFactory,
-  type BaseReadOptions,
   type RequestTask,
   type SubscribeOptions,
   type Transport,
-  type BaseWriteOptions,
 } from '@hmi-ts/core'
-import {
-  decodeResponseByMode,
-  encodeReadCoilsByMode,
-  encodeReadDiscreteInputsByMode,
-  encodeReadHoldingRegistersByMode,
-  encodeWriteMultipleCoilsByMode,
-  encodeWriteMultipleRegistersByMode,
-  encodeWriteSingleCoilByMode,
-  encodeWriteSingleRegisterByMode,
-  type ModbusWireMode,
-} from '@hmi-ts/protocol'
 import { PRIORITY, RequestScheduler } from '@hmi-ts/scheduler'
 import { SubscriptionEngine } from '@hmi-ts/subscription'
 
@@ -57,23 +44,23 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       onConnect?: (cb: () => void) => void
     }
 
-    options.transport.onData((data) => {
-      try {
-        // 解析响应
-        const response = decodeResponseByMode(data, 'tcp')
-        // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
-        if (this.inFlight && (this.mode !== 'tcp' || this.inFlight.tx === response.transactionId)) {
-          // inFlight 用来确保按顺序匹配
-          this.inFlight.resolve({
-            ...response,
-            transactionId: this.inFlight.tx,
-          })
-          this.inFlight = null
-        }
-      } catch (error) {
-        this.emit('error', error as Error)
-      }
-    })
+    // options.transport.onData((data) => {
+    //   try {
+    //     // 解析响应
+    //     const response = decodeResponseByMode(data, 'tcp')
+    //     // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
+    //     if (this.inFlight && (this.mode !== 'tcp' || this.inFlight.tx === response.transactionId)) {
+    //       // inFlight 用来确保按顺序匹配
+    //       this.inFlight.resolve({
+    //         ...response,
+    //         transactionId: this.inFlight.tx,
+    //       })
+    //       this.inFlight = null
+    //     }
+    //   } catch (error) {
+    //     this.emit('error', error as Error)
+    //   }
+    // })
 
     options.transport.onClose((error) => {
       this.scheduler.clearPending(new ConnectionClosedError())
@@ -175,13 +162,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   subscribe(options: SubscribeOptions & Parameters<T['encodeRead']>[0]) {
     // 报文合并必须满足, unitId 一致, interval 一致
     // subscriptionEngine 里实现了报文合并功能
-    return this.subscriptionEngine.subscribe({
-      unitId: options.unitId ?? this.options.defaultUnitId ?? 1,
-      start: params.start,
-      length: params.length,
-      interval: options.interval ?? this.options.defaultInterval ?? 1000,
-      callback: options.callback,
-    })
+    return this.subscriptionEngine.subscribe(options)
   }
 
   private async scheduleRequest(task: RequestTask<IResponse>): Promise<IResponse> {

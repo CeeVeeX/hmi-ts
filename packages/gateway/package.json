@@ -1,8 +1,8 @@
 {
-  "name": "@hmi-ts/transport-udp",
+  "name": "@hmi-ts/gateway",
   "version": "0.0.1",
   "type": "module",
-  "description": "hmi-ts",
+  "description": "The gateway package for hmi-ts.",
   "author": "Cee Vee X <ceeveex@hotmail.com>",
   "license": "MIT",
   "homepage": "https://github.com/ceeveex/hmi-ts#readme",
@@ -33,18 +33,27 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@hmi-ts/core": "workspace:*"
+    "@hmi-ts/utils": "workspace:*",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.8.1",
+    "@types/ws": "^8.18.1",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.8"
   },
   "keywords": [
-    "async",
+    "modbus",
+    "hmi-ts",
+    "gateway",
+    "websocket",
+    "tcp-relay",
+    "proxy",
+    "connection-pool",
+    "browser",
+    "plc",
     "typescript",
-    "esm",
-    "shared"
+    "esm"
   ]
 }
