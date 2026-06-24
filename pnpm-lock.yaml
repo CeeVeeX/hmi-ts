@@ -59,9 +59,9 @@ importers:
       '@hmi-ts/codec':
         specifier: workspace:*
         version: link:../../packages/codec
-      '@hmi-ts/msg-modbus-tcp':
+      '@hmi-ts/protocol-modbus-tcp':
         specifier: workspace:*
-        version: link:../../packages/msg-modbus-tcp
+        version: link:../../packages/protocol-modbus-tcp
       '@hmi-ts/transport-tcp':
         specifier: workspace:*
         version: link:../../packages/transport-tcp
@@ -118,18 +118,6 @@ importers:
       '@hmi-ts/core':
         specifier: workspace:*
         version: link:../core
-      '@hmi-ts/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@hmi-ts/scheduler':
-        specifier: workspace:*
-        version: link:../scheduler
-      '@hmi-ts/subscription':
-        specifier: workspace:*
-        version: link:../subscription
-      '@hmi-ts/utils':
-        specifier: workspace:*
-        version: link:../utils
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -167,9 +155,6 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@hmi-ts/utils':
-        specifier: workspace:*
-        version: link:../utils
       ws:
         specifier: ^8.18.3
         version: 8.21.0
@@ -190,7 +175,7 @@ importers:
         specifier: ^4.0.8
         version: 4.1.5(@types/node@24.12.2)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  packages/msg-mc-3e:
+  packages/protocol-mc-3e:
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -202,7 +187,7 @@ importers:
         specifier: ^4.0.8
         version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  packages/msg-mc-4e:
+  packages/protocol-mc-4e:
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -214,7 +199,7 @@ importers:
         specifier: ^4.0.8
         version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  packages/msg-modbus-ascii:
+  packages/protocol-modbus-ascii:
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -226,7 +211,7 @@ importers:
         specifier: ^4.0.8
         version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  packages/msg-modbus-rtu:
+  packages/protocol-modbus-rtu:
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -238,58 +223,7 @@ importers:
         specifier: ^4.0.8
         version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  packages/msg-modbus-tcp:
-    devDependencies:
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.0.8
-        version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-
-  packages/protocol:
-    dependencies:
-      '@hmi-ts/core':
-        specifier: workspace:*
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.0.8
-        version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-
-  packages/scheduler:
-    dependencies:
-      '@hmi-ts/core':
-        specifier: workspace:*
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.0.8
-        version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-
-  packages/subscription:
-    dependencies:
-      '@hmi-ts/core':
-        specifier: workspace:*
-        version: link:../core
-      '@hmi-ts/utils':
-        specifier: workspace:*
-        version: link:../utils
+  packages/protocol-modbus-tcp:
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -344,18 +278,6 @@ importers:
       '@hmi-ts/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.0.8
-        version: 4.1.5(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-
-  packages/utils:
     devDependencies:
       tsup:
         specifier: ^8.5.0

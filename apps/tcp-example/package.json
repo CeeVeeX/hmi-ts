@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@hmi-ts/client": "workspace:*",
-    "@hmi-ts/msg-modbus-tcp": "workspace:*",
+    "@hmi-ts/protocol-modbus-tcp": "workspace:*",
     "@hmi-ts/codec": "workspace:*",
     "@hmi-ts/transport-tcp": "workspace:*",
     "dotenv": "^17.4.2"
