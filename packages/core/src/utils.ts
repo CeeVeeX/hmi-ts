@@ -1,5 +1,3 @@
-export * from './event-emitter'
-
 /**
  * 异步休眠指定毫秒。
  *

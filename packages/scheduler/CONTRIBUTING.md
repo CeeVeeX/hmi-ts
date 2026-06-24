@@ -1,1 +1,0 @@
-# Contributing: @hmi-ts/scheduler
