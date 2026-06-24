@@ -1,8 +1,7 @@
 import 'dotenv/config'
 import { Client } from '@hmi-ts/client'
-import { decodeAsciiString, encodeAsciiString } from '@hmi-ts/codec'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
-import { ModbusTcpPacketFactory } from '@hmi-ts/msg-modbus-tcp'
+import { ModbusTcpPacketFactory, WriteFn } from '@hmi-ts/protocol-modbus-tcp'
 
 // client.connect() 错误后，延迟一秒再次尝试连接
 function retryConnect(client: Client<ModbusTcpPacketFactory>, delayMs = 1000): void {
@@ -34,9 +33,27 @@ async function main(): Promise<void> {
     defaultTimeout: 1000,
   })
 
-  client.on('connect', () => console.log('connected'))
-  client.on('disconnect', () => console.log('disconnected'))
+  client.on('connected', async () => {
+    console.log('connected')
+  })
+  client.on('disconnected', () => console.log('disconnected'))
   client.on('error', (err) => console.error('error', err))
+
+  setInterval(async () => {
+    try {
+      await client.write({
+        type: WriteFn.WriteMultipleCoils,
+        start: 0,
+        value: Array.from({ length: 1000 }, () => Math.random() > 0.5),
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      if (error.name !== 'TimeoutError') {
+        console.error('write failed:', error)
+      }
+    }
+  }, 16)
 
   try {
     setInterval(() => {}, 9999)

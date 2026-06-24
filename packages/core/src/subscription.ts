@@ -1,5 +1,6 @@
-import type { PacketFactory, ReadOptions, SubscribeOptions, Subscription } from '@hmi-ts/core'
-import { areArraysEqual, sleep } from '@hmi-ts/utils'
+import type { BaseReadOptions, SubscribeOptions } from './options'
+import type { PacketFactory } from './packet'
+import { areArraysEqual, sleep } from './utils'
 
 /**
  * 带上次数据快照的订阅对象。
@@ -43,7 +44,7 @@ export interface MergedRange {
 export interface PollGroup {
   interval: number
   subscriptions: Map<string, SubscriptionGroup>
-  mergedRanges: ReadOptions[]
+  mergedRanges: BaseReadOptions[]
   running: boolean
 }
 
@@ -57,9 +58,9 @@ export interface PollGroup {
  * }
  * ```
  */
-export interface SubscriptionEngineOptions {
-  packetFactory: PacketFactory
-  read: (options: ReadOptions) => Promise<number[]>
+export interface SubscriptionEngineOptions<T extends PacketFactory> {
+  packetFactory: T
+  read: (options: Parameters<T['encodeRead']>[1]) => Promise<Uint8Array>
   onError?: (error: Error) => void
 }
 
@@ -83,12 +84,12 @@ function makeRangeKey(unitId: number, start: number, length: number): string {
  * engine.stop()
  * ```
  */
-export class SubscriptionEngine {
+export class SubscriptionEngine<T extends PacketFactory> {
   private groups = new Map<number, PollGroup>()
   private running = false
   private seq = 0
 
-  constructor(private readonly options: SubscriptionEngineOptions) {}
+  constructor(private readonly options: SubscriptionEngineOptions<T>) {}
 
   subscribe(params: SubscribeOptions): () => void {
     const id = `sub-${++this.seq}`
@@ -168,7 +169,7 @@ export class SubscriptionEngine {
     const ranges = [...subscriptions.values()]
       .map(
         (s): MergedRange => ({
-          unitId: s.unitId,
+          unitId: s.unitId ?? 1,
           start: s.start,
           length: s.length,
         }),

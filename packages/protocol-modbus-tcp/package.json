@@ -1,5 +1,5 @@
 {
-  "name": "@hmi-ts/msg-modbus-tcp",
+  "name": "@hmi-ts/protocol-modbus-tcp",
   "version": "0.0.1",
   "type": "module",
   "description": "hmi-ts",

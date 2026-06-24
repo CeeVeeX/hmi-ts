@@ -1,5 +1,5 @@
-import { EventEmitter } from '@hmi-ts/utils'
 import {
+  EventEmitter,
   ConnectionClosedError,
   ProtocolError,
   type IResponse,
@@ -7,13 +7,17 @@ import {
   type RequestTask,
   type SubscribeOptions,
   type Transport,
+  PRIORITY,
+  RequestScheduler,
+  SubscriptionEngine,
+  ResponseCode,
+  type PartialBy,
 } from '@hmi-ts/core'
-import { PRIORITY, RequestScheduler } from '@hmi-ts/scheduler'
-import { SubscriptionEngine } from '@hmi-ts/subscription'
 
 export interface ClientEvent {
-  connect: () => void
-  disconnect: (error?: Error) => void
+  connected: () => void
+  disconnected: (error: Error) => void
+  destroyed: (error: Error) => void
   timeout: (error: Error) => void
   error: (error: Error) => void
 }
@@ -35,40 +39,41 @@ interface InFlight {
 export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   private scheduler = new RequestScheduler()
   private sequence = 0
-  private subscriptionEngine: SubscriptionEngine
+  private subscriptionEngine: SubscriptionEngine<T>
   private inFlight: InFlight | null = null
   constructor(private readonly options: ClientOptions<T>) {
     super()
 
-    // options.transport.onData((data) => {
-    //   try {
-    //     // 解析响应
-    //     const response = decodeResponseByMode(data, 'tcp')
-    //     // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
-    //     if (this.inFlight && (this.mode !== 'tcp' || this.inFlight.tx === response.transactionId)) {
-    //       // inFlight 用来确保按顺序匹配
-    //       this.inFlight.resolve({
-    //         ...response,
-    //         transactionId: this.inFlight.tx,
-    //       })
-    //       this.inFlight = null
-    //     }
-    //   } catch (error) {
-    //     this.emit('error', error as Error)
-    //   }
-    // })
-
-    options.transport.on('connect', () => {
-      this.emit('connect')
+    options.transport.on('message', (data) => {
+      try {
+        // 解析响应
+        // const response = decodeResponseByMode(data, 'tcp')
+        const response = options.packetFactory.decodeResponse(data)
+        // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
+        if (
+          this.inFlight &&
+          (options.packetFactory.isSerial || this.inFlight.tx === response.transactionId)
+        ) {
+          // inFlight 用来确保按顺序匹配
+          this.inFlight.resolve(response)
+          this.inFlight = null
+        }
+      } catch (error) {
+        this.emit('error', error as Error)
+      }
     })
 
-    options.transport.on('disconnect', (error) => {
+    options.transport.on('connected', () => {
+      this.emit('connected')
+    })
+
+    options.transport.on('disconnected', (error) => {
       this.scheduler.clearPending(new ConnectionClosedError())
       if (this.inFlight) {
         this.inFlight.reject(new ConnectionClosedError())
         this.inFlight = null
       }
-      this.emit('disconnect', error)
+      this.emit('disconnected', error)
     })
 
     this.subscriptionEngine = new SubscriptionEngine({
@@ -106,13 +111,24 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     await this.options.transport.close()
   }
 
-  async write(options: Parameters<T['encodeWrite']>[0]) {
+  async destroy(): Promise<void> {
+    this.subscriptionEngine.stop()
+    this.scheduler.close(new ConnectionClosedError())
+    await this.options.transport.destroy()
+  }
+
+  async write(options: PartialBy<Parameters<T['encodeWrite']>[1], 'unitId'>): Promise<IResponse> {
     const tx = this.nextTx()
+
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
     // 构建帧
-    const frame = this.options.packetFactory.encodeWrite(options)
+    const frame = this.options.packetFactory.encodeWrite(tx, {
+      ...options,
+      unitId,
+      timeout,
+    })
 
     // 安排请求并等待响应
     const response = await this.scheduleRequest({
@@ -124,18 +140,20 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       reject: () => {},
     })
 
-    if (!response.success) {
-      throw new ProtocolError(`modbus exception ${response.exceptionCode}`)
-    }
+    return response
   }
 
-  async read(options: Parameters<T['encodeRead']>[0]): Promise<number[]> {
+  async read(options: PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>): Promise<Uint8Array> {
     const tx = this.nextTx()
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
     // 构建帧
-    const frame: Uint8Array = this.options.packetFactory.encodeRead(options)
+    const frame: Uint8Array = this.options.packetFactory.encodeRead(tx, {
+      ...options,
+      unitId,
+      timeout,
+    })
 
     // 安排请求并等待响应
     const response = await this.scheduleRequest({
@@ -147,10 +165,10 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       reject: () => {},
     })
 
-    if (!response.success) {
-      throw new ProtocolError(`exception ${response.exceptionCode}`)
+    if (response.code !== ResponseCode.SUCCESS) {
+      throw new ProtocolError(`exception ${response.code}`)
     }
-    return response.registers ?? []
+    return response.data ?? new Uint8Array()
   }
 
   subscribe(options: SubscribeOptions & Parameters<T['encodeRead']>[0]) {
@@ -168,7 +186,8 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       if ((error as Error).name === 'TimeoutError') {
         this.emit('timeout', error as Error)
       }
-      throw error
+
+      return Promise.reject(error)
     }
   }
 
@@ -190,11 +209,6 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   }
 
   private nextTx(): number {
-    // transactionId 按 16 位递增循环；0 常留作未初始化/保留值，这里跳过。
-    this.sequence = (this.sequence + 1) & 0xffff
-    if (this.sequence === 0) {
-      this.sequence = 1
-    }
-    return this.sequence
+    return this.options.packetFactory.getTransactionId(++this.sequence)
   }
 }

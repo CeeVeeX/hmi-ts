@@ -1,5 +1,11 @@
 import dgram from 'node:dgram'
-import { ConnectionClosedError, TransportError, type Transport } from '@hmi-ts/core'
+import {
+  ConnectionClosedError,
+  EventEmitter,
+  TransportError,
+  type Transport,
+  type TransportEvent,
+} from '@hmi-ts/core'
 
 /**
  * UDP 传输配置。
@@ -51,13 +57,15 @@ export type ConnectCallback = () => void
  * await transport.send(Uint8Array.from([0x01, 0x03]))
  * ```
  */
-export class UdpTransport implements Transport {
+export class UdpTransport extends EventEmitter<TransportEvent> implements Transport {
   private socket: dgram.Socket | null = null
   private dataCallbacks: DataCallback[] = []
   private closeCallbacks: CloseCallback[] = []
   private connectCallbacks: ConnectCallback[] = []
 
-  constructor(private readonly options: UdpTransportOptions) {}
+  constructor(private readonly options: UdpTransportOptions) {
+    super()
+  }
 
   async connect(): Promise<void> {
     if (this.socket) {
@@ -98,6 +106,10 @@ export class UdpTransport implements Transport {
       socket.once('close', () => resolve())
       socket.close()
     })
+  }
+
+  async destroy(): Promise<void> {
+    await this.close()
   }
 
   async send(data: Uint8Array): Promise<void> {

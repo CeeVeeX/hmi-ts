@@ -1,5 +1,5 @@
 {
-  "name": "@hmi-ts/msg-modbus-rtu",
+  "name": "@hmi-ts/protocol-modbus-rtu",
   "version": "0.0.1",
   "type": "module",
   "description": "hmi-ts",

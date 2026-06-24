@@ -1,4 +1,10 @@
-import { ConnectionClosedError, TransportError, type Transport } from '@hmi-ts/core'
+import {
+  ConnectionClosedError,
+  EventEmitter,
+  TransportError,
+  type Transport,
+  type TransportEvent,
+} from '@hmi-ts/core'
 
 /**
  * WebSocket 传输配置。
@@ -49,7 +55,7 @@ export type ConnectCallback = () => void
  * await transport.send(Uint8Array.from([0x00, 0x01]))
  * ```
  */
-export class WsTransport implements Transport {
+export class WsTransport extends EventEmitter<TransportEvent> implements Transport {
   private ws: WebSocket | null = null
   private dataCallbacks: DataCallback[] = []
   private closeCallbacks: CloseCallback[] = []
@@ -60,6 +66,7 @@ export class WsTransport implements Transport {
   private manualClose = false
 
   constructor(private readonly options: WsTransportOptions) {
+    super()
     this.reconnectDelay = options.reconnectDelayMs ?? 300
   }
 
@@ -89,6 +96,10 @@ export class WsTransport implements Transport {
       current.onclose = () => resolve()
       current.close()
     })
+  }
+
+  async destroy(): Promise<void> {
+    await this.close()
   }
 
   async send(data: Uint8Array): Promise<void> {

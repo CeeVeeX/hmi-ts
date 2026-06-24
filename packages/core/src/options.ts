@@ -1,6 +1,6 @@
 export interface CommonOptions {
   start: number
-  unitId?: number
+  unitId: number
   timeout?: number
   priority?: number
 }

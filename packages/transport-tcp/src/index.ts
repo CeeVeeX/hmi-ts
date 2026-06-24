@@ -2,10 +2,10 @@ import net from 'node:net'
 import {
   ConnectionClosedError,
   TransportError,
+  EventEmitter,
   type Transport,
   type TransportEvent,
 } from '@hmi-ts/core'
-import { EventEmitter } from '@hmi-ts/utils'
 
 /**
  * TCP 传输配置。
@@ -104,6 +104,23 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
     }
   }
 
+  async destroy(): Promise<void> {
+    this.manualClose = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
+    if (this.socket) {
+      const socket = this.socket
+      this.socket = null
+      await new Promise<void>((resolve) => {
+        socket.once('close', () => resolve())
+        socket.destroy()
+      })
+    }
+  }
+
   async send(data: Uint8Array): Promise<void> {
     const socket = this.socket
     if (!socket || socket.destroyed) {
@@ -161,7 +178,7 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
 
     this.socket = socket
     this.reconnectDelay = this.options.reconnectDelayMs ?? 300
-    this.emit('connect')
+    this.emit('connected')
   }
 
   private onSocketData(chunk: Buffer): void {
@@ -178,7 +195,7 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
       const frame = this.receiveBuffer.subarray(0, frameLength)
       this.receiveBuffer = this.receiveBuffer.subarray(frameLength)
       const payload = new Uint8Array(frame.buffer, frame.byteOffset, frame.byteLength)
-      this.emit('data', payload)
+      this.emit('message', payload)
     }
   }
 
@@ -201,6 +218,6 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
 
   private emitClose(err?: Error): void {
     this.emit('error', err ?? new ConnectionClosedError())
-    this.emit('disconnect', err)
+    this.emit('disconnected', err ?? new ConnectionClosedError())
   }
 }

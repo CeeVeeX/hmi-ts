@@ -1,4 +1,4 @@
-import { EventEmitter } from '@hmi-ts/utils'
+import { EventEmitter } from './event'
 
 /**
  * 传输层事件类型。

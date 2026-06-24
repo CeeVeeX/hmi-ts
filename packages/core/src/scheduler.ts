@@ -1,4 +1,5 @@
-import { ConnectionClosedError, TimeoutError, type RequestTask } from '@hmi-ts/core'
+import { ConnectionClosedError, TimeoutError } from './error'
+import type { RequestTask } from './request'
 
 /**
  * 调度优先级常量。
@@ -88,7 +89,10 @@ export class RequestScheduler {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new TimeoutError(`task ${task.id} timeout`)), task.timeout)
       })
+
+      // 任意 Promise 执行结果都会触发 resolve，若 execute 先完成，超时计时器仍会在后台触发一次 reject，但不会影响已
       const result = await Promise.race([task.execute(), timeoutPromise])
+
       task.resolve(result)
     } catch (error) {
       task.reject(error as Error)
@@ -100,6 +104,13 @@ export class RequestScheduler {
     }
   }
 
+  /**
+   * 调度下一次任务执行。
+   * 通过 microtask 合并同一事件循环内的多次 schedule，减少重复调度开销。
+   * 若当前已有任务在执行，则不做任何操作。
+   * 若队列为空，则不做任何操作。
+   * 若调度器已关闭，则不做任何操作。
+   */
   private scheduleDispatch(): void {
     if (this.dispatchScheduled || this.closed) {
       return
@@ -111,6 +122,7 @@ export class RequestScheduler {
       this.dispatchScheduled = false
       void this.runNext().catch(() => {
         // Errors are already routed via task.reject.
+        console.log('runNext Err')
       })
     })
   }

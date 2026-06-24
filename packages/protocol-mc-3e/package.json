@@ -1,5 +1,5 @@
 {
-  "name": "@hmi-ts/msg-mc-3e",
+  "name": "@hmi-ts/protocol-mc-3e",
   "version": "0.0.1",
   "type": "module",
   "description": "hmi-ts",
