@@ -1,6 +1,6 @@
 import type { BaseReadOptions, SubscribeOptions } from './options'
 import type { PacketFactory } from './packet'
-import { areArraysEqual, sleep } from './utils'
+import { areArraysEqual, sleep, uint8ToHex } from './utils'
 
 /**
  * 带上次数据快照的订阅对象。
@@ -95,7 +95,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     const id = `sub-${++this.seq}`
     const sub: SubscriptionGroup = {
       ...params,
-      interval: params.interval ?? 100,
+      interval: params.interval ?? 0,
       id,
     }
 
@@ -166,15 +166,9 @@ export class SubscriptionEngine<T extends PacketFactory> {
   }
 
   private mergeSubscriptions(subscriptions: Map<string, SubscriptionGroup>): MergedRange[] {
-    const ranges = [...subscriptions.values()]
-      .map(
-        (s): MergedRange => ({
-          unitId: s.unitId ?? 1,
-          start: s.start,
-          length: s.length,
-        }),
-      )
-      .sort((a, b) => a.unitId - b.unitId || a.start - b.start)
+    const ranges = [...subscriptions.values()].sort(
+      (a, b) => a.unitId - b.unitId || a.start - b.start,
+    )
 
     const merged: MergedRange[] = []
     for (const range of ranges) {
@@ -227,6 +221,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     for (const range of group.mergedRanges) {
       const values = await this.options.read(range)
 
+      console.log(uint8ToHex(values))
       for (const sub of group.subscriptions.values()) {
         if (sub.unitId !== range.unitId) {
           continue
@@ -238,6 +233,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
 
         const offset = sub.start - range.start
         const chunk = values.slice(offset, offset + sub.length)
+
         // 只在数据发生变化时触发回调，避免高频重复通知。
         if (!sub.lastData || !areArraysEqual(sub.lastData, chunk)) {
           sub.lastData = [...chunk]

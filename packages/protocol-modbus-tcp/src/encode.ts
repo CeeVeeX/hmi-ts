@@ -12,7 +12,7 @@ export function createReadPdu(tId: number, opt: ReadOptions) {
   const pdu = new Uint8Array(5)
   pdu[0] = opt.type
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
-  pdu.set([length >> 8, length & 0xff], 3)
+  pdu.set([opt.length >> 8, opt.length & 0xff], 3)
   return wrapMbapHeader(pdu, tId, opt.unitId)
 }
 

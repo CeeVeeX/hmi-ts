@@ -1,4 +1,4 @@
-import { type PacketFactory, type IResponse, ResponseCode } from '@hmi-ts/core'
+import { type PacketFactory, type IResponse, ResponseCode, uint8ToHex } from '@hmi-ts/core'
 import { ReadFn, WriteFn, type ReadOptions, type WriteOptions } from './type'
 import {
   createReadPdu,
@@ -109,7 +109,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
   }
 
   decodeResponse(data: Uint8Array): IResponse {
-    console.log('decodeResponse', data)
+    console.log(uint8ToHex(data))
     return {
       transactionId: (data[0] << 8) | data[1],
       row: data,

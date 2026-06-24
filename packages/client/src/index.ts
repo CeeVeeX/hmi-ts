@@ -171,10 +171,19 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     return response.data ?? new Uint8Array()
   }
 
-  subscribe(options: SubscribeOptions & Parameters<T['encodeRead']>[0]) {
+  subscribe(
+    options: PartialBy<SubscribeOptions, 'unitId'> &
+      PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>,
+  ) {
+    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
     // 报文合并必须满足, unitId 一致, interval 一致
     // subscriptionEngine 里实现了报文合并功能
-    return this.subscriptionEngine.subscribe(options)
+    return this.subscriptionEngine.subscribe({
+      ...options,
+      unitId,
+      timeout,
+    })
   }
 
   private async scheduleRequest(task: RequestTask<IResponse>): Promise<IResponse> {

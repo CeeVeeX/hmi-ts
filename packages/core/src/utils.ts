@@ -56,3 +56,9 @@ export function areArraysEqual(a: readonly number[], b: readonly number[]): bool
   }
   return true
 }
+
+export function uint8ToHex(arr: Uint8Array, separator?: string): string {
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(separator ?? ' ')
+}
