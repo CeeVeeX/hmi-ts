@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { ModbusTcpPacketFactory, ReadFn, WriteFn, type ReadOptions } from '../src/index'
+import {
+  ModbusTcpPacketFactory,
+  ReadFn,
+  WriteFn,
+  type ReadOptions,
+  type WriteOptions,
+} from '../src/index'
 import {
   type ReadCoilsOptions,
   type ReadDiscreteInputsOptions,
@@ -14,6 +20,8 @@ import { wrapMbapHeader } from '../src/encode'
 
 describe('ModbusTcpPacketFactory', () => {
   const factory = new ModbusTcpPacketFactory()
+  const encodeRead = (options: ReadOptions) => factory.encodeRead(0, options)
+  const encodeWrite = (options: WriteOptions) => factory.encodeWrite(0, options)
 
   describe('encodeRead', () => {
     it('应该正确编码读取线圈指令', () => {
@@ -24,7 +32,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 10,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       // MBAP 头 (7 字节) + PDU (5 字节) = 12 字节
       expect(result.length).toBe(12)
@@ -54,7 +62,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 8,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x02) // 功能码: 读取离散输入
@@ -72,7 +80,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 16,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x03) // 功能码: 读取保持寄存器
@@ -90,7 +98,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 5,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x04) // 功能码: 读取输入寄存器
@@ -108,7 +116,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 1,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result[8]).toBe(0xff) // 起始地址高字节
       expect(result[9]).toBe(0xff) // 起始地址低字节 (65535)
@@ -122,7 +130,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 65535,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result[10]).toBe(0xff) // 数量高字节
       expect(result[11]).toBe(0xff) // 数量低字节 (65535)
@@ -139,7 +147,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: true,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x05) // 功能码: 写单个线圈
@@ -157,7 +165,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: false,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x05) // 功能码: 写单个线圈
@@ -175,7 +183,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: 1,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[10]).toBe(0xff) // 值高字节 (ON)
         expect(result[11]).toBe(0x00) // 值低字节
@@ -189,7 +197,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: 0,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[10]).toBe(0x00) // 值高字节 (OFF)
         expect(result[11]).toBe(0x00) // 值低字节
@@ -205,7 +213,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: 1234,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x06) // 功能码: 写单个寄存器
@@ -223,7 +231,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: 0,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[10]).toBe(0x00) // 值高字节
         expect(result[11]).toBe(0x00) // 值低字节
@@ -237,7 +245,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: 65535,
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[10]).toBe(0xff) // 值高字节
         expect(result[11]).toBe(0xff) // 值低字节
@@ -253,7 +261,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [true, false, true, false, true],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         // MBAP (7) + PDU: func(1) + addr(2) + qty(2) + byteCount(1) + data(1) = 14
         expect(result.length).toBe(14)
@@ -275,7 +283,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [true, true, true, true, true, true, true, true, false],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         // 9 个线圈 = 2 个字节
         expect(result.length).toBe(15)
@@ -292,7 +300,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result.length).toBe(13)
         expect(result[10]).toBe(0x00) // 数量低字节
@@ -307,7 +315,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [1, 0, 1],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[13]).toBe(0x05) // 位模式: 101 = 0x05
       })
@@ -322,7 +330,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [100, 200, 300],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         // MBAP (7) + PDU: func(1) + addr(2) + qty(2) + byteCount(1) + data(6) = 19
         expect(result.length).toBe(19)
@@ -350,7 +358,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [65535],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result.length).toBe(15)
         expect(result[11]).toBe(0x01) // 数量低字节
@@ -367,7 +375,7 @@ describe('ModbusTcpPacketFactory', () => {
           value: [0, 0, 0],
         }
 
-        const result = factory.encodeWrite(0, options)
+        const result = encodeWrite(options)
 
         expect(result[13]).toBe(0x00)
         expect(result[14]).toBe(0x00)
@@ -662,7 +670,7 @@ describe('ModbusTcpPacketFactory', () => {
         length: 1,
       }
 
-      const result = factory.encodeRead(0, options)
+      const result = encodeRead(options)
 
       expect(result[8]).toBe(0xc0) // 起始地址高字节
       expect(result[9]).toBe(0x00) // 起始地址低字节
@@ -676,7 +684,7 @@ describe('ModbusTcpPacketFactory', () => {
         value: 0x1234,
       }
 
-      const result = factory.encodeWrite(0, options)
+      const result = encodeWrite(options)
 
       expect(result[10]).toBe(0x12) // 高字节在前
       expect(result[11]).toBe(0x34) // 低字节在后
