@@ -1,5 +1,4 @@
 import { RequestMethod } from '@hmi-ts/core'
-import { uint8ToHex } from '@hmi-ts/codec'
 import {
   WriteFn,
   type ReadOptions,
