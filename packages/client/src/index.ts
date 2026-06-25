@@ -12,7 +12,6 @@ import {
   SubscriptionEngine,
   type PartialBy,
   type IResponse,
-  type CommonOptions,
   QueueOverflowError,
 } from '@hmi-ts/core'
 
@@ -41,14 +40,14 @@ type RequestResponse<T extends PacketFactory> =
   | IWriteResponse<WriteOptions<T>>
 type InFlightResponse<T extends PacketFactory> = IResponse<RequestOptions<T>>
 
-interface InFlightTask {
+interface InFlightTask<T extends PacketFactory> {
   id: number
   startAt: number
-  options: CommonOptions
+  options: RequestOptions<T>
 }
 
 interface InFlight<T extends PacketFactory> {
-  tk: InFlightTask
+  tk: InFlightTask<T>
   resolve: (response: InFlightResponse<T> | PromiseLike<InFlightResponse<T>>) => void
   reject: (error: Error) => void
 }
@@ -83,7 +82,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
             ...response,
             startAt: this.inFlight.tk.startAt,
             endAt: Date.now(),
-          })
+          } as InFlightResponse<T>)
           this.inFlight = null
         }
       } catch (error) {
@@ -251,7 +250,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
         tk: {
           id: tk.id,
           startAt: tk.startAt,
-          options: tk.options,
+          options: tk.options as RequestOptions<T>,
         },
         resolve: (response) => resolve(response as unknown as R),
         reject,

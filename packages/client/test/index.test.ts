@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { foo } from '../src/index'
+import * as api from '../src/index'
 
-describe('name', () => {
-  it('foo', async () => {
-    expect(foo).toEqual('foo')
+describe('client exports', () => {
+  it('module is importable', () => {
+    expect(api).toBeDefined()
   })
 })

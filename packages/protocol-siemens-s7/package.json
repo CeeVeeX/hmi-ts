@@ -1,8 +1,8 @@
 {
-  "name": "@hmi-ts/protocol-modbus-ascii",
+  "name": "@hmi-ts/protocol-siemens-s7",
   "version": "0.0.1",
   "type": "module",
-  "description": "hmi-ts",
+  "description": "Siemens S7 protocol packet factory for hmi-ts",
   "author": "Cee Vee X <ceeveex@hotmail.com>",
   "license": "MIT",
   "homepage": "https://github.com/ceeveex/hmi-ts#readme",
@@ -33,15 +33,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@hmi-ts/codec": "workspace:*",
+    "@hmi-ts/core": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.8"
   },
   "keywords": [
-    "async",
-    "typescript",
-    "esm",
-    "shared"
+    "siemens",
+    "s7",
+    "hmi",
+    "typescript"
   ]
 }
