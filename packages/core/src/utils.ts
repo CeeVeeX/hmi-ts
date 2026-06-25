@@ -37,28 +37,16 @@ export class Deferred<T> {
 }
 
 /**
- * 比较两个 number 数组是否逐项相等。
- *
- * @example
- * ```ts
- * areArraysEqual([1, 2], [1, 2]) // true
- * areArraysEqual([1, 2], [2, 1]) // false
- * ```
+ * 比较两个 Uint8Array 是否逐项相等。
+ * @param a 第一个 Uint8Array
+ * @param b 第二个 Uint8Array
+ * @returns 如果两个数组逐项相等，则返回 true，否则返回 false
  */
-export function areArraysEqual(a: readonly number[], b: readonly number[]): boolean {
-  if (a.length !== b.length) {
-    return false
-  }
+export function uint8ArrayEquals(a?: Uint8Array, b?: Uint8Array): boolean {
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false
-    }
+    if (a[i] !== b[i]) return false
   }
   return true
-}
-
-export function uint8ToHex(arr: Uint8Array, separator?: string): string {
-  return Array.from(arr)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join(separator ?? ' ')
 }

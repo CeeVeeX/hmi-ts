@@ -23,12 +23,12 @@ export interface AsciiStringEncodeOptions {
   padByte?: number
   asciiOnly?: boolean
   /**
-   * 固定输出的寄存器数量。如果字符串占用的寄存器少于该值，剩余寄存器用 padByte 填充。
-   * 如果未设置或小于实际需要的寄存器数，则按实际需要返回（除非启用 truncate）。
+   * 固定输出的字数量。如果字符串占用的字少于该值，剩余字用 padByte 填充。
+   * 如果未设置或小于实际需要的字数，则按实际需要返回（除非启用 truncate）。
    *
    * @example
    * ```ts
-   * // "TEXT" 占用 2 个寄存器，但指定长度为 10，返回 10 个寄存器（后 8 个为 0）
+   * // "TEXT" 占用 2 个字，但指定长度为 10，返回 10 个字（后 8 个为 0）
    * encodeAsciiString('TEXT', { length: 10 })
    * // 返回: [0x5445, 0x5854, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
    * ```
@@ -43,7 +43,7 @@ export interface AsciiStringEncodeOptions {
    * ```ts
    * // 不截断（默认行为）
    * encodeAsciiString('ABCDEFGHIJ', { length: 3 })
-   * // 返回: [0x4142, 0x4344, 0x4546, 0x4748, 0x494a] (5 个寄存器)
+   * // 返回: [0x4142, 0x4344, 0x4546, 0x4748, 0x494a] (5 个字)
    *
    * // 截断模式
    * encodeAsciiString('ABCDEFGHIJ', { length: 3, truncate: true })
@@ -54,7 +54,7 @@ export interface AsciiStringEncodeOptions {
 }
 
 /**
- * ASCII 寄存器解码选项。
+ * ASCII 字解码选项。
  *
  * @example
  * ```ts
@@ -76,7 +76,7 @@ function applySwaps(bytes: Uint8Array, options: SwapOptions = {}): Uint8Array {
   const out = bytes.slice()
 
   if (options.byteSwap) {
-    for (let i = 0; i < out.length; i += 2) {
+    for (let i = 0; i + 1 < out.length; i += 2) {
       const a = out[i]
       out[i] = out[i + 1]
       out[i + 1] = a
@@ -96,12 +96,9 @@ function applySwaps(bytes: Uint8Array, options: SwapOptions = {}): Uint8Array {
   return out
 }
 
-function fromRegisters(registers: number[]): Uint8Array {
-  const out = new Uint8Array(registers.length * 2)
-  const view = new DataView(out.buffer)
-  registers.forEach((reg, index) => {
-    view.setUint16(index * 2, reg)
-  })
+function getPaddedBytes(bytes: Uint8Array, size: number): Uint8Array {
+  const out = new Uint8Array(size)
+  out.set(bytes.subarray(0, size))
   return out
 }
 
@@ -115,91 +112,116 @@ function toRegisters(bytes: Uint8Array): number[] {
 }
 
 /**
- * 把首个寄存器按无符号 16 位整数解码。
- *
- * @example
- * ```ts
- * decodeUint16([0x1234]) // 4660
- * ```
+ * Uint8Array 转 布尔
  */
-export function decodeUint16(registers: number[]): number {
-  return registers[0] ?? 0
+export function decodeBoolean(bytes: Uint8Array): boolean {
+  if (bytes.length === 0) {
+    throw new RangeError('bytes must not be empty')
+  }
+  return bytes[0] !== 0
 }
 
 /**
- * 把首个寄存器按有符号 16 位整数解码。
+ * Uint8Array 转二进制字符串
+ * @param bytes 输入字节数组
+ * @param maxBits 最多显示的位数，默认显示所有
+ */
+export function decodeBinaryString(bytes: Uint8Array, maxBits?: number): string {
+  const result = Array.from(bytes)
+    .map((b) => b.toString(2).padStart(8, '0'))
+    .join('')
+
+  return maxBits !== undefined ? result.substring(0, maxBits) : result
+}
+
+/**
+ * 把首个字按无符号 16 位整数解码。
  *
  * @example
  * ```ts
- * decodeInt16([0xffff]) // -1
+ * decodeUint16(Uint8Array.of(0x12, 0x34)) // 4660
  * ```
  */
-export function decodeInt16(registers: number[]): number {
-  const view = new DataView(new ArrayBuffer(2))
-  view.setUint16(0, registers[0] ?? 0)
+export function decodeUint16(bytes: Uint8Array): number {
+  const input = getPaddedBytes(bytes, 2)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getUint16(0)
+}
+
+/**
+ * 把首个字按有符号 16 位整数解码。
+ *
+ * @example
+ * ```ts
+ * decodeInt16(Uint8Array.of(0xff, 0xff)) // -1
+ * ```
+ */
+export function decodeInt16(bytes: Uint8Array): number {
+  const input = getPaddedBytes(bytes, 2)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getInt16(0)
 }
 
 /**
- * 将两个寄存器解码为无符号 32 位整数。
+ * 将两个字解码为无符号 32 位整数。
  *
  * @example
  * ```ts
- * decodeUint32([0x1234, 0x5678]) // 0x12345678
+ * decodeUint32(Uint8Array.of(0x12, 0x34, 0x56, 0x78)) // 0x12345678
  * ```
  */
-export function decodeUint32(registers: number[], options?: SwapOptions): number {
-  const bytes = applySwaps(fromRegisters(registers.slice(0, 2)), options)
-  const view = new DataView(bytes.buffer)
+export function decodeUint32(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getUint32(0)
 }
 
 /**
- * 将两个寄存器解码为有符号 32 位整数。
+ * 将两个字解码为有符号 32 位整数。
  *
  * @example
  * ```ts
- * decodeInt32([0xffff, 0xfffe]) // -2
+ * decodeInt32(Uint8Array.of(0xff, 0xff, 0xff, 0xfe)) // -2
  * ```
  */
-export function decodeInt32(registers: number[], options?: SwapOptions): number {
-  const bytes = applySwaps(fromRegisters(registers.slice(0, 2)), options)
-  const view = new DataView(bytes.buffer)
+export function decodeInt32(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getInt32(0)
 }
 
 /**
- * 将两个寄存器解码为 Float32。
+ * 将两个字解码为 Float32。
  *
  * @example
  * ```ts
- * const regs = encodeFloat32(12.5)
- * const value = decodeFloat32(regs)
+ * const bytes = Uint8Array.of(0x41, 0x48, 0x00, 0x00)
+ * const value = decodeFloat32(bytes)
  * ```
  */
-export function decodeFloat32(registers: number[], options?: SwapOptions): number {
-  const bytes = applySwaps(fromRegisters(registers.slice(0, 2)), options)
-  const view = new DataView(bytes.buffer)
+export function decodeFloat32(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getFloat32(0)
 }
 
 /**
- * 将四个寄存器解码为 Float64。
+ * 将四个字解码为 Float64。
  *
  * @example
  * ```ts
- * const regs = encodeFloat64(123.456)
- * const value = decodeFloat64(regs)
+ * const bytes = Uint8Array.of(0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f, 0xbe, 0x77)
+ * const value = decodeFloat64(bytes)
  * ```
  */
-export function decodeFloat64(registers: number[], options?: SwapOptions): number {
-  const bytes = applySwaps(fromRegisters(registers.slice(0, 4)), options)
-  const view = new DataView(bytes.buffer)
+export function decodeFloat64(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 8), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getFloat64(0)
 }
 
 /**
- * 把 Float32 编码为两个寄存器。
+ * 把 Float32 编码为两个字。
  *
  * @example
  * ```ts
@@ -214,7 +236,7 @@ export function encodeFloat32(value: number, options?: SwapOptions): number[] {
 }
 
 /**
- * 把 Float64 编码为四个寄存器。
+ * 把 Float64 编码为四个字。
  *
  * @example
  * ```ts
@@ -229,12 +251,12 @@ export function encodeFloat64(value: number, options?: SwapOptions): number[] {
 }
 
 /**
- * 将 ASCII 字符串编码为寄存器数组（每寄存器 2 字节）。
+ * 将 ASCII 字符串编码为字数组（每字 2 字节）。
  *
  * @example
  * ```ts
  * encodeAsciiString('HELLO', { padByte: 0x20 })
- * encodeAsciiString('TEXT', { length: 10 }) // 固定 10 个寄存器，未使用的填充 0
+ * encodeAsciiString('TEXT', { length: 10 }) // 固定 10 个字，未使用的填充 0
  * encodeAsciiString('ABCDEFGHIJ', { length: 3, truncate: true }) // 截断为前 6 个字符
  * ```
  */
@@ -245,10 +267,10 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
   const truncate = options.truncate ?? false
   ensureByte(padByte, 'padByte')
 
-  // 计算实际需要的寄存器数量
+  // 计算实际需要的字数量
   const requiredLength = Math.ceil(value.length / 2)
 
-  // 确定最终输出的寄存器数量
+  // 确定最终输出的字数量
   let outputLength: number
   let truncatedValue: string = value
 
@@ -270,7 +292,7 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
   const out = new Array<number>(outputLength)
   let offset = 0
 
-  // 编码字符串字符到寄存器
+  // 编码字符串字符到字
   for (let i = 0; i < truncatedValue.length; i += 2) {
     const hi = truncatedValue.charCodeAt(i)
     if (asciiOnly && hi > 0x7f) {
@@ -290,7 +312,7 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
     out[offset++] = (hi << 8) | lo
   }
 
-  // 如果指定了固定长度，用 padByte 填充剩余寄存器
+  // 如果指定了固定长度，用 padByte 填充剩余字
   while (offset < outputLength) {
     out[offset++] = (padByte << 8) | padByte
   }
@@ -299,20 +321,19 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
 }
 
 /**
- * 将寄存器数组解码为 ASCII 字符串。
+ * 将字数组解码为 ASCII 字符串。
  *
  * @example
  * ```ts
- * decodeAsciiString([0x4845, 0x4c4c, 0x4f00]) // 'HELLO'
+ * decodeAsciiString(Uint8Array.of(0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x00)) // 'HELLO'
  * ```
  */
 export function decodeAsciiString(
-  registers: number[],
+  bytes: Uint8Array,
   options: AsciiStringDecodeOptions = {},
 ): string {
   const asciiOnly = options.asciiOnly ?? true
   const trimTrailingNull = options.trimTrailingNull ?? true
-  const bytes = fromRegisters(registers)
 
   let end = bytes.length
   if (trimTrailingNull) {
@@ -331,4 +352,16 @@ export function decodeAsciiString(
   }
 
   return out
+}
+
+/**
+ * 将 Uint8Array 转换为十六进制字符串。
+ * @param arr 要转换的 Uint8Array
+ * @param separator 可选的分隔符，默认为空格
+ * @returns 转换后的十六进制字符串
+ */
+export function uint8ToHex(arr: Uint8Array, separator?: string): string {
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(separator ?? ' ')
 }

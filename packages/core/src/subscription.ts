@@ -1,6 +1,7 @@
 import type { BaseReadOptions, SubscribeOptions } from './options'
 import type { PacketFactory } from './packet'
-import { areArraysEqual, sleep, uint8ToHex } from './utils'
+import { ResponseCode, type IReadResponse } from './response'
+import { sleep, uint8ArrayEquals } from './utils'
 
 /**
  * 带上次数据快照的订阅对象。
@@ -16,7 +17,7 @@ import { areArraysEqual, sleep, uint8ToHex } from './utils'
 export interface SubscriptionGroup extends SubscribeOptions {
   id: string
   interval: number
-  lastData?: number[]
+  lastData?: Uint8Array
 }
 
 /**
@@ -60,7 +61,9 @@ export interface PollGroup {
  */
 export interface SubscriptionEngineOptions<T extends PacketFactory> {
   packetFactory: T
-  read: (options: Parameters<T['encodeRead']>[1]) => Promise<Uint8Array>
+  read: (
+    options: Parameters<T['encodeRead']>[1],
+  ) => Promise<IReadResponse<Parameters<T['encodeRead']>[1]>>
   onError?: (error: Error) => void
 }
 
@@ -219,25 +222,36 @@ export class SubscriptionEngine<T extends PacketFactory> {
     group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
 
     for (const range of group.mergedRanges) {
-      const values = await this.options.read(range)
+      const res = await this.options.read(range)
 
-      console.log(uint8ToHex(values))
+      if (res.code !== ResponseCode.SUCCESS) continue
+
+      // console.log('data:', uint8ToHex(res.data))
+
       for (const sub of group.subscriptions.values()) {
+        // console.log(sub)
+
         if (sub.unitId !== range.unitId) {
           continue
         }
 
-        if (sub.start < range.start || sub.start + sub.length > range.start + range.length) {
+        const chunk = this.options.packetFactory.sliceReadResponse(sub, res)
+
+        if (!chunk) {
+          console.warn(`sub ${sub.id} sliceReadResponse returned null, skipping callback.`)
           continue
         }
 
-        const offset = sub.start - range.start
-        const chunk = values.slice(offset, offset + sub.length)
+        // console.log(`sub ${sub.id} callback:`, uint8ToHex(chunk))
 
         // 只在数据发生变化时触发回调，避免高频重复通知。
-        if (!sub.lastData || !areArraysEqual(sub.lastData, chunk)) {
-          sub.lastData = [...chunk]
-          sub.callback(chunk)
+        if (!sub.lastData || !uint8ArrayEquals(sub.lastData, chunk)) {
+          sub.lastData = chunk
+          sub.callback({
+            ...res,
+            options: sub,
+            data: chunk,
+          })
         }
       }
     }

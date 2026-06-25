@@ -1,12 +1,28 @@
-import { type PacketFactory, type IResponse, ResponseCode, uint8ToHex } from '@hmi-ts/core'
-import { ReadFn, WriteFn, type ReadOptions, type WriteOptions } from './type'
+import {
+  type PacketFactory,
+  ResponseCode,
+  type IResponse,
+  RequestMethod,
+  type IRowResponse,
+} from '@hmi-ts/core'
+import {
+  ModbusExceptionToResponseCode,
+  ReadFn,
+  WriteFn,
+  type ReadOptions,
+  type WriteOptions,
+} from './type'
 import {
   createReadPdu,
   encodeWriteMultiCoils,
   encodeWriteMultiRegs,
   encodeWriteSingleCoil,
   encodeWriteSingleReg,
+  getMethodByFnCode,
+  parseModbusTcpResponse,
 } from './encode'
+
+import { uint8ToHex } from '@hmi-ts/codec'
 
 export {
   ReadFn,
@@ -22,13 +38,27 @@ export {
 
 // -------------------------- 工厂类 --------------------------
 export class ModbusTcpPacketFactory implements PacketFactory {
-  getTransactionId(sequence: number): number {
+  /**
+   * 获取事务ID
+   * @param sequence 序列号
+   * @param response 响应数据
+   * @returns 事务ID
+   */
+  getTransactionId(sequence: number): number
+  getTransactionId(response: Uint8Array): number
+  getTransactionId(sequence: number | Uint8Array): number {
+    if (sequence instanceof Uint8Array) {
+      // 从响应数据中解析事务ID
+      const transactionId = (sequence[0] << 8) | sequence[1]
+      return transactionId & 0xffff // 事务ID为16位
+    }
+
     return sequence & 0xffff // 事务ID为16位
   }
 
   encodeRead(transactionId: number, options: ReadOptions): Uint8Array {
-    const { type } = options
-    switch (type) {
+    const { fn } = options
+    switch (fn) {
       case ReadFn.ReadCoils:
       case ReadFn.ReadDiscreteInputs:
       case ReadFn.ReadHoldingRegisters:
@@ -37,13 +67,13 @@ export class ModbusTcpPacketFactory implements PacketFactory {
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const _exhaustive: never = options
-        throw new Error(`不支持的读取功能码：${type}`)
+        throw new Error(`不支持的读取功能码：${fn}`)
       }
     }
   }
 
   encodeWrite(transactionId: number, options: WriteOptions): Uint8Array {
-    switch (options.type) {
+    switch (options.fn) {
       case WriteFn.WriteSingleCoil:
         return encodeWriteSingleCoil(transactionId, options)
       case WriteFn.WriteSingleRegister:
@@ -55,7 +85,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const _exhaustive: never = options
-        throw new Error(`未知写入功能码: ${(options as WriteOptions).type}`)
+        throw new Error(`未知写入功能码: ${(options as WriteOptions).fn}`)
       }
     }
   }
@@ -65,11 +95,11 @@ export class ModbusTcpPacketFactory implements PacketFactory {
       return []
     }
 
-    // 按 unitId 和 type 分组
+    // 按 unitId 和 fn 分组
     const grouped = new Map<string, ReadOptions[]>()
     for (const opt of options) {
       const unitId = opt.unitId ?? 1 // 默认 unitId 为 1
-      const key = `${unitId}:${opt.type}`
+      const key = `${unitId}:${opt.fn}`
       const existing = grouped.get(key) || []
       existing.push(opt)
       grouped.set(key, existing)
@@ -108,13 +138,111 @@ export class ModbusTcpPacketFactory implements PacketFactory {
     return merged
   }
 
-  decodeResponse(data: Uint8Array): IResponse {
-    console.log(uint8ToHex(data))
-    return {
-      transactionId: (data[0] << 8) | data[1],
-      row: data,
-      code: ResponseCode.SUCCESS,
-      data: data.subarray(7), // 去掉MBAP头，保留PDU部分
+  /**
+   * modbus tcp 响应数据截取,兼容 寄存器和线圈的读取响应数据截取
+   * @param options 读取请求参数
+   * @param response 响应数据
+   * @returns 截取后的响应数据
+   * @throws 如果响应方法与请求不匹配，或响应数据长度不足，则抛出错误。
+   * @example
+   * ```ts
+   * const options: ReadOptions = { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 }
+   * const response: IResponse = await modbusClient.read(options)
+   * const dataChunk = packetFactory.sliceReadResponse(options, response)
+   * ```
+   */
+  sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {
+    if (response.method !== RequestMethod.READ) {
+      throw new Error(`响应方法与请求不匹配: ${response.method}`)
+    }
+
+    if (response.code !== ResponseCode.SUCCESS) {
+      return null
+    }
+
+    const { start, length, fn } = options
+    const { data, byteCount } = response
+    const startAddress = response.options.start
+
+    if (data.length < byteCount) {
+      throw new Error(`响应数据长度不足: ${data.length} < ${byteCount}`)
+    }
+
+    if (fn === ReadFn.ReadCoils || fn === ReadFn.ReadDiscreteInputs) {
+      // 计算相对于响应数据起始位置的偏移
+      const offset = (startAddress ?? 0) === start ? 0 : start - (startAddress ?? 0)
+      const startBit = offset
+      const endBit = startBit + length
+      const totalBits = data.length * 8
+
+      if (endBit > totalBits) {
+        throw new Error(`截取范围超出响应数据位长度: ${endBit} > ${totalBits}`)
+      }
+
+      const out = new Uint8Array(Math.ceil(length / 8))
+      for (let i = 0; i < length; i++) {
+        const sourceBit = startBit + i
+        const sourceByte = data[sourceBit >> 3] ?? 0
+        const sourceMask = 1 << (sourceBit & 0x07)
+        if ((sourceByte & sourceMask) !== 0) {
+          out[i >> 3] |= 1 << (i & 0x07)
+        }
+      }
+      return out
+    }
+
+    // 寄存器/输入寄存器：相对偏移 = (请求地址 - 响应起始地址) * 2
+    const relativeOffset = start - (startAddress ?? 0)
+    const startIndex = relativeOffset * 2
+    const endIndex = startIndex + length * 2
+
+    if (startIndex < 0 || endIndex > data.length) {
+      throw new Error(
+        `截取范围超出响应数据长度: startIndex=${startIndex}, endIndex=${endIndex}, dataLength=${data.length}, data: ${uint8ToHex(response.row!)}`,
+      )
+    }
+
+    return data.slice(startIndex, endIndex)
+  }
+
+  decodeResponse(
+    options: ReadOptions | WriteOptions,
+    d: Uint8Array,
+  ): IRowResponse<ReadOptions | WriteOptions> {
+    const { fn } = options
+    const { transactionId, data, byteCount, exceptionCode } = parseModbusTcpResponse(d)
+
+    const method = getMethodByFnCode(fn)
+
+    if (exceptionCode !== null) {
+      // 异常响应
+      return {
+        options: options,
+        transactionId,
+        method,
+        row: d,
+        code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
+      } as IRowResponse<ReadOptions | WriteOptions>
+    }
+
+    if (method === RequestMethod.READ) {
+      return {
+        options: options,
+        transactionId,
+        method,
+        row: d,
+        code: ResponseCode.SUCCESS,
+        data, // 仅返回数据部分，去掉 MBAP 头和 PDU 功能码
+        byteCount,
+      } as IRowResponse<ReadOptions | WriteOptions>
+    } else {
+      return {
+        options: options,
+        transactionId,
+        method,
+        row: d,
+        code: ResponseCode.SUCCESS,
+      } as IRowResponse<ReadOptions | WriteOptions>
     }
   }
 }

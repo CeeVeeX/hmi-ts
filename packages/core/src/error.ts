@@ -51,3 +51,18 @@ export class ConnectionClosedError extends Error {
     this.name = 'ConnectionClosedError'
   }
 }
+
+/**
+ * 队列溢出异常。
+ *
+ * @example
+ * ```ts
+ * throw new QueueOverflowError('request queue is full')
+ * ```
+ */
+export class QueueOverflowError extends Error {
+  constructor(message = 'request queue is full') {
+    super(message)
+    this.name = 'QueueOverflowError'
+  }
+}

@@ -1,4 +1,4 @@
-import { ConnectionClosedError, TimeoutError } from './error'
+import { ConnectionClosedError, TimeoutError, QueueOverflowError } from './error'
 import type { RequestTask } from './request'
 
 /**
@@ -21,10 +21,11 @@ export const PRIORITY = {
  * - 同一时刻只执行一个任务
  * - 按优先级排序，优先级相同按任务 id 升序
  * - 支持超时与关闭清队列
+ * - 队列超过 maxQueueSize 时拒绝新请求（实现背压控制）
  *
  * @example
  * ```ts
- * const scheduler = new RequestScheduler()
+ * const scheduler = new RequestScheduler(100) // 最多 100 个待处理任务
  * const result = await scheduler.schedule({
  *   id: 1,
  *   priority: PRIORITY.read,
@@ -40,10 +41,25 @@ export class RequestScheduler {
   private inFlight = false
   private closed = false
   private dispatchScheduled = false
+  private readonly maxQueueSize: number
+
+  constructor(maxQueueSize = 1000) {
+    this.maxQueueSize = maxQueueSize
+  }
 
   schedule<T>(task: RequestTask<T>): Promise<T> {
     if (this.closed) {
       return Promise.reject(new ConnectionClosedError('scheduler is closed'))
+    }
+
+    // 检查队列是否已满（执行中的任务 + 队列中的任务）
+    const totalPending = (this.inFlight ? 1 : 0) + this.queue.length
+    if (totalPending >= this.maxQueueSize) {
+      return Promise.reject(
+        new QueueOverflowError(
+          `request queue is full (${totalPending}/${this.maxQueueSize}), please retry later`,
+        ),
+      )
     }
 
     return new Promise<T>((resolve, reject) => {
@@ -91,7 +107,7 @@ export class RequestScheduler {
       })
 
       // 任意 Promise 执行结果都会触发 resolve，若 execute 先完成，超时计时器仍会在后台触发一次 reject，但不会影响已
-      const result = await Promise.race([task.execute(), timeoutPromise])
+      const result = await Promise.race([task.execute(task), timeoutPromise])
 
       task.resolve(result)
     } catch (error) {

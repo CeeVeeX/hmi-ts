@@ -1,5 +1,5 @@
-import type { BaseReadOptions, BaseWriteOptions } from './options'
-import type { IResponse } from './response'
+import type { BaseReadOptions, BaseWriteOptions, CommonOptions } from './options'
+import type { IResponse, IRowResponse } from './response'
 
 export interface PacketFactory {
   /**
@@ -10,9 +10,12 @@ export interface PacketFactory {
   /**
    * 获取事务ID
    * @param sequence 序列号
+   * @param response 响应数据
    * @returns 事务ID
    */
   getTransactionId(sequence: number): number
+  getTransactionId(response: Uint8Array): number
+  getTransactionId(sequence: number | Uint8Array): number
 
   /**
    * 编码读取请求
@@ -36,9 +39,18 @@ export interface PacketFactory {
   mergeRead(options: BaseReadOptions[]): BaseReadOptions[]
 
   /**
+   * 截取对应配置的响应数据
+   * @param options 读取请求参数
+   * @param response 响应数据
+   * @returns 截取后的响应数据
+   */
+  sliceReadResponse(options: BaseReadOptions, response: IResponse): Uint8Array | null
+
+  /**
    * 解码响应数据
+   * @param options 请求参数
    * @param data 响应数据
    * @returns 解码后的响应对象
    */
-  decodeResponse(data: Uint8Array): IResponse
+  decodeResponse(opt: CommonOptions, data: Uint8Array): IRowResponse
 }

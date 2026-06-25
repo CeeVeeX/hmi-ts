@@ -1,8 +1,8 @@
 import {
   EventEmitter,
   ConnectionClosedError,
-  ProtocolError,
-  type IResponse,
+  type IReadResponse,
+  type IWriteResponse,
   type PacketFactory,
   type RequestTask,
   type SubscribeOptions,
@@ -10,8 +10,9 @@ import {
   PRIORITY,
   RequestScheduler,
   SubscriptionEngine,
-  ResponseCode,
   type PartialBy,
+  type IResponse,
+  QueueOverflowError,
 } from '@hmi-ts/core'
 
 export interface ClientEvent {
@@ -25,37 +26,49 @@ export interface ClientEvent {
 export interface ClientOptions<T> {
   packetFactory: T
   transport: Transport
+  maxQueueSize?: number
   defaultUnitId?: number
   defaultTimeout?: number
   defaultInterval?: number
 }
 
-interface InFlight {
-  tx: number
-  resolve: (response: IResponse) => void
+interface InFlight<T extends IResponse> {
+  tk: RequestTask<T>
+  resolve: (response: T | PromiseLike<T>) => void
   reject: (error: Error) => void
 }
 
 export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
-  private scheduler = new RequestScheduler()
+  private scheduler: RequestScheduler
   private sequence = 0
   private subscriptionEngine: SubscriptionEngine<T>
-  private inFlight: InFlight | null = null
+  private inFlight: InFlight<IResponse> | null = null
   constructor(private readonly options: ClientOptions<T>) {
     super()
 
+    this.scheduler = new RequestScheduler(this.options.maxQueueSize ?? 1000)
+
+    // 所有响应都通过 transport 的 message 事件接收，按 transactionId 匹配到对应的请求。
     options.transport.on('message', (data) => {
       try {
-        // 解析响应
-        // const response = decodeResponseByMode(data, 'tcp')
-        const response = options.packetFactory.decodeResponse(data)
+        if (!this.inFlight) {
+          throw new Error('no inFlight request, but received a response')
+        }
+
         // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
         if (
-          this.inFlight &&
-          (options.packetFactory.isSerial || this.inFlight.tx === response.transactionId)
+          options.packetFactory.isSerial ||
+          this.inFlight.tk.id === options.packetFactory.getTransactionId(data)
         ) {
+          // 解析响应
+          const response = options.packetFactory.decodeResponse(this.inFlight.tk.options, data)
+
           // inFlight 用来确保按顺序匹配
-          this.inFlight.resolve(response)
+          this.inFlight.resolve({
+            ...response,
+            startAt: this.inFlight.tk.startAt,
+            endAt: Date.now(),
+          })
           this.inFlight = null
         }
       } catch (error) {
@@ -117,25 +130,31 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     await this.options.transport.destroy()
   }
 
-  async write(options: PartialBy<Parameters<T['encodeWrite']>[1], 'unitId'>): Promise<IResponse> {
+  async write(
+    options: PartialBy<Parameters<T['encodeWrite']>[1], 'unitId'>,
+  ): Promise<IWriteResponse> {
     const tx = this.nextTx()
 
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
-    // 构建帧
-    const frame = this.options.packetFactory.encodeWrite(tx, {
+    const opts = {
       ...options,
       unitId,
       timeout,
-    })
+    }
+
+    // 构建帧
+    const frame = this.options.packetFactory.encodeWrite(tx, opts)
 
     // 安排请求并等待响应
-    const response = await this.scheduleRequest({
+    const response = await this.scheduleRequest<IWriteResponse>({
       id: tx,
       priority: options?.priority ?? PRIORITY.write,
       timeout,
-      execute: () => this.performRequest(tx, frame),
+      options: opts,
+      startAt: Date.now(),
+      execute: (task) => this.performRequest(task, frame),
       resolve: () => {},
       reject: () => {},
     })
@@ -143,32 +162,33 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     return response
   }
 
-  async read(options: PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>): Promise<Uint8Array> {
+  async read(options: PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>): Promise<IReadResponse> {
     const tx = this.nextTx()
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
-    // 构建帧
-    const frame: Uint8Array = this.options.packetFactory.encodeRead(tx, {
+    const opts = {
       ...options,
       unitId,
       timeout,
-    })
+    }
+
+    // 构建帧
+    const frame: Uint8Array = this.options.packetFactory.encodeRead(tx, opts)
 
     // 安排请求并等待响应
-    const response = await this.scheduleRequest({
+    const response = await this.scheduleRequest<IReadResponse>({
       id: tx,
       priority: options?.priority ?? PRIORITY.read,
       timeout,
-      execute: () => this.performRequest(tx, frame),
+      options: opts,
+      startAt: Date.now(),
+      execute: (task) => this.performRequest(task, frame),
       resolve: () => {},
       reject: () => {},
     })
 
-    if (response.code !== ResponseCode.SUCCESS) {
-      throw new ProtocolError(`exception ${response.code}`)
-    }
-    return response.data ?? new Uint8Array()
+    return response
   }
 
   subscribe(
@@ -186,10 +206,15 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     })
   }
 
-  private async scheduleRequest(task: RequestTask<IResponse>): Promise<IResponse> {
+  private async scheduleRequest<T extends IResponse>(task: RequestTask<T>): Promise<T> {
     try {
       return await this.scheduler.schedule(task)
     } catch (error) {
+      // 队列溢出：系统过载，建议降低请求速率或增加超时
+      if (error instanceof QueueOverflowError) {
+        this.emit('error', error as Error)
+      }
+
       // 调度器把超时作为普通异常抛出；这里统一转成客户端 timeout 事件，
       // 让上层既能捕获异常，也能通过事件做监控或告警。
       if ((error as Error).name === 'TimeoutError') {
@@ -200,15 +225,18 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     }
   }
 
-  private async performRequest(tx: number, frame: Uint8Array): Promise<IResponse> {
-    return new Promise<IResponse>((resolve, reject) => {
+  private async performRequest<T extends IResponse>(
+    tk: RequestTask<T>,
+    frame: Uint8Array,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       // 当前客户端假设“单连接串行请求”：任何时刻仅保留一个 inFlight。
       // 该约束由 RequestScheduler 保证，避免响应乱序匹配。
       this.inFlight = {
-        tx,
+        tk,
         resolve,
         reject,
-      }
+      } as unknown as InFlight<IResponse>
 
       void this.options.transport.send(frame).catch((error) => {
         this.inFlight = null
