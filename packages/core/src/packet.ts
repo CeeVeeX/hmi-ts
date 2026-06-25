@@ -44,7 +44,10 @@ export interface PacketFactory {
    * @param response 响应数据
    * @returns 截取后的响应数据
    */
-  sliceReadResponse(options: BaseReadOptions, response: IResponse): Uint8Array | null
+  sliceReadResponse(
+    options: BaseReadOptions,
+    response: IResponse<BaseReadOptions>,
+  ): Uint8Array | null
 
   /**
    * 解码响应数据
@@ -52,5 +55,5 @@ export interface PacketFactory {
    * @param data 响应数据
    * @returns 解码后的响应对象
    */
-  decodeResponse(opt: CommonOptions, data: Uint8Array): IRowResponse
+  decodeResponse(opt: CommonOptions, data: Uint8Array): IRowResponse<BaseReadOptions | BaseWriteOptions>
 }

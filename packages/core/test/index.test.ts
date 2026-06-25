@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { foo } from '../src/index'
+import { ResponseCode } from '../src/index'
 
 describe('name', () => {
-  it('foo', async () => {
-    expect(foo).toEqual('foo')
+  it('exports response codes', async () => {
+    expect(ResponseCode.SUCCESS).toEqual(0)
   })
 })
