@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import { ModbusTcpPacketFactory, ReadFn, WriteFn, type ReadOptions } from '../src/index'
 import {
-  ModbusTcpPacketFactory,
-  ReadFn,
-  WriteFn,
-  wrapMbapHeader,
   type ReadCoilsOptions,
   type ReadDiscreteInputsOptions,
   type ReadHoldingRegistersOptions,
   type ReadInputRegistersOptions,
-  type ReadOptions,
   type WriteCoilOptions,
-  type WriteRegisterOptions,
   type WriteCoilsOptions,
+  type WriteRegisterOptions,
   type WriteRegistersOptions,
-} from '../src/index'
+} from '../src/type'
+import { wrapMbapHeader } from '../src/encode'
 
 describe('ModbusTcpPacketFactory', () => {
   const factory = new ModbusTcpPacketFactory()
@@ -21,12 +18,13 @@ describe('ModbusTcpPacketFactory', () => {
   describe('encodeRead', () => {
     it('应该正确编码读取线圈指令', () => {
       const options: ReadCoilsOptions = {
-        type: ReadFn.ReadCoils,
+        fn: ReadFn.ReadCoils,
+        unitId: 1,
         start: 100,
         length: 10,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       // MBAP 头 (7 字节) + PDU (5 字节) = 12 字节
       expect(result.length).toBe(12)
@@ -50,12 +48,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该正确编码读取离散输入指令', () => {
       const options: ReadDiscreteInputsOptions = {
-        type: ReadFn.ReadDiscreteInputs,
+        fn: ReadFn.ReadDiscreteInputs,
+        unitId: 1,
         start: 200,
         length: 8,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x02) // 功能码: 读取离散输入
@@ -67,12 +66,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该正确编码读取保持寄存器指令', () => {
       const options: ReadHoldingRegistersOptions = {
-        type: ReadFn.ReadHoldingRegisters,
+        fn: ReadFn.ReadHoldingRegisters,
+        unitId: 1,
         start: 0,
         length: 16,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x03) // 功能码: 读取保持寄存器
@@ -84,12 +84,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该正确编码读取输入寄存器指令', () => {
       const options: ReadInputRegistersOptions = {
-        type: ReadFn.ReadInputRegisters,
+        fn: ReadFn.ReadInputRegisters,
+        unitId: 1,
         start: 1000,
         length: 5,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result.length).toBe(12)
       expect(result[7]).toBe(0x04) // 功能码: 读取输入寄存器
@@ -101,12 +102,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该处理最大起始地址', () => {
       const options: ReadHoldingRegistersOptions = {
-        type: ReadFn.ReadHoldingRegisters,
+        fn: ReadFn.ReadHoldingRegisters,
+        unitId: 1,
         start: 65535,
         length: 1,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result[8]).toBe(0xff) // 起始地址高字节
       expect(result[9]).toBe(0xff) // 起始地址低字节 (65535)
@@ -114,12 +116,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该处理最大长度', () => {
       const options: ReadHoldingRegistersOptions = {
-        type: ReadFn.ReadHoldingRegisters,
+        fn: ReadFn.ReadHoldingRegisters,
+        unitId: 1,
         start: 0,
         length: 65535,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result[10]).toBe(0xff) // 数量高字节
       expect(result[11]).toBe(0xff) // 数量低字节 (65535)
@@ -130,12 +133,13 @@ describe('ModbusTcpPacketFactory', () => {
     describe('WriteSingleCoil', () => {
       it('应该正确编码单个线圈 ON', () => {
         const options: WriteCoilOptions = {
-          type: WriteFn.WriteSingleCoil,
+          fn: WriteFn.WriteSingleCoil,
+          unitId: 1,
           start: 100,
           value: true,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x05) // 功能码: 写单个线圈
@@ -147,12 +151,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该正确编码单个线圈 OFF', () => {
         const options: WriteCoilOptions = {
-          type: WriteFn.WriteSingleCoil,
+          fn: WriteFn.WriteSingleCoil,
+          unitId: 1,
           start: 200,
           value: false,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x05) // 功能码: 写单个线圈
@@ -164,12 +169,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码单个线圈的数值 1 为 ON', () => {
         const options: WriteCoilOptions = {
-          type: WriteFn.WriteSingleCoil,
+          fn: WriteFn.WriteSingleCoil,
+          unitId: 1,
           start: 0,
           value: 1,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[10]).toBe(0xff) // 值高字节 (ON)
         expect(result[11]).toBe(0x00) // 值低字节
@@ -177,12 +183,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码单个线圈的数值 0 为 OFF', () => {
         const options: WriteCoilOptions = {
-          type: WriteFn.WriteSingleCoil,
+          fn: WriteFn.WriteSingleCoil,
+          unitId: 1,
           start: 0,
           value: 0,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[10]).toBe(0x00) // 值高字节 (OFF)
         expect(result[11]).toBe(0x00) // 值低字节
@@ -192,12 +199,13 @@ describe('ModbusTcpPacketFactory', () => {
     describe('WriteSingleRegister', () => {
       it('应该正确编码单个寄存器', () => {
         const options: WriteRegisterOptions = {
-          type: WriteFn.WriteSingleRegister,
+          fn: WriteFn.WriteSingleRegister,
+          unitId: 1,
           start: 10,
           value: 1234,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result.length).toBe(12)
         expect(result[7]).toBe(0x06) // 功能码: 写单个寄存器
@@ -209,12 +217,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码单个寄存器的值 0', () => {
         const options: WriteRegisterOptions = {
-          type: WriteFn.WriteSingleRegister,
+          fn: WriteFn.WriteSingleRegister,
+          unitId: 1,
           start: 0,
           value: 0,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[10]).toBe(0x00) // 值高字节
         expect(result[11]).toBe(0x00) // 值低字节
@@ -222,12 +231,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码单个寄存器的最大值', () => {
         const options: WriteRegisterOptions = {
-          type: WriteFn.WriteSingleRegister,
+          fn: WriteFn.WriteSingleRegister,
+          unitId: 1,
           start: 0,
           value: 65535,
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[10]).toBe(0xff) // 值高字节
         expect(result[11]).toBe(0xff) // 值低字节
@@ -237,12 +247,13 @@ describe('ModbusTcpPacketFactory', () => {
     describe('WriteMultipleCoils', () => {
       it('应该正确编码多个线圈', () => {
         const options: WriteCoilsOptions = {
-          type: WriteFn.WriteMultipleCoils,
+          fn: WriteFn.WriteMultipleCoils,
+          unitId: 1,
           start: 0,
           value: [true, false, true, false, true],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         // MBAP (7) + PDU: func(1) + addr(2) + qty(2) + byteCount(1) + data(1) = 14
         expect(result.length).toBe(14)
@@ -258,12 +269,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码跨越多个字节的多个线圈', () => {
         const options: WriteCoilsOptions = {
-          type: WriteFn.WriteMultipleCoils,
+          fn: WriteFn.WriteMultipleCoils,
+          unitId: 1,
           start: 0,
           value: [true, true, true, true, true, true, true, true, false],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         // 9 个线圈 = 2 个字节
         expect(result.length).toBe(15)
@@ -274,12 +286,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码空的线圈数组', () => {
         const options: WriteCoilsOptions = {
-          type: WriteFn.WriteMultipleCoils,
+          fn: WriteFn.WriteMultipleCoils,
+          unitId: 1,
           start: 0,
           value: [],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result.length).toBe(13)
         expect(result[10]).toBe(0x00) // 数量低字节
@@ -288,12 +301,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码数值型的线圈', () => {
         const options: WriteCoilsOptions = {
-          type: WriteFn.WriteMultipleCoils,
+          fn: WriteFn.WriteMultipleCoils,
+          unitId: 1,
           start: 0,
           value: [1, 0, 1],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[13]).toBe(0x05) // 位模式: 101 = 0x05
       })
@@ -302,12 +316,13 @@ describe('ModbusTcpPacketFactory', () => {
     describe('WriteMultipleRegisters', () => {
       it('应该正确编码多个寄存器', () => {
         const options: WriteRegistersOptions = {
-          type: WriteFn.WriteMultipleRegisters,
+          fn: WriteFn.WriteMultipleRegisters,
+          unitId: 1,
           start: 20,
           value: [100, 200, 300],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         // MBAP (7) + PDU: func(1) + addr(2) + qty(2) + byteCount(1) + data(6) = 19
         expect(result.length).toBe(19)
@@ -329,12 +344,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码单个寄存器的多个写入', () => {
         const options: WriteRegistersOptions = {
-          type: WriteFn.WriteMultipleRegisters,
+          fn: WriteFn.WriteMultipleRegisters,
+          unitId: 1,
           start: 0,
           value: [65535],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result.length).toBe(15)
         expect(result[11]).toBe(0x01) // 数量低字节
@@ -345,12 +361,13 @@ describe('ModbusTcpPacketFactory', () => {
 
       it('应该编码零值寄存器', () => {
         const options: WriteRegistersOptions = {
-          type: WriteFn.WriteMultipleRegisters,
+          fn: WriteFn.WriteMultipleRegisters,
+          unitId: 1,
           start: 0,
           value: [0, 0, 0],
         }
 
-        const result = factory.encodeWrite(options)
+        const result = factory.encodeWrite(0, options)
 
         expect(result[13]).toBe(0x00)
         expect(result[14]).toBe(0x00)
@@ -390,8 +407,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该合并重叠区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 5, length: 10 },
       ]
 
       const result = factory.mergeRead(options)
@@ -403,8 +420,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该合并相邻区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 10, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 10, length: 10 },
       ]
 
       const result = factory.mergeRead(options)
@@ -416,8 +433,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('不应该合并非重叠区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 5 },
-        { type: ReadFn.ReadHoldingRegisters, start: 10, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 10, length: 5 },
       ]
 
       const result = factory.mergeRead(options)
@@ -431,9 +448,9 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该合并多个重叠区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 12, length: 8 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 5, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 12, length: 8 },
       ]
 
       const result = factory.mergeRead(options)
@@ -445,9 +462,9 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该处理部分重叠区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 8, length: 5 },
-        { type: ReadFn.ReadHoldingRegisters, start: 15, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 8, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 15, length: 5 },
       ]
 
       const result = factory.mergeRead(options)
@@ -461,10 +478,10 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该按读取类型分组', () => {
       const options: ReadOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10 },
-        { type: ReadFn.ReadCoils, start: 0, length: 10 },
-        { type: ReadFn.ReadCoils, start: 5, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 5, length: 10 },
+        { fn: ReadFn.ReadCoils, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadCoils, unitId: 1, start: 5, length: 10 },
       ]
 
       const result = factory.mergeRead(options)
@@ -472,13 +489,13 @@ describe('ModbusTcpPacketFactory', () => {
       expect(result.length).toBe(2)
 
       // 找到保持寄存器结果
-      const holdingResult = result.find((r) => r.type === ReadFn.ReadHoldingRegisters)
+      const holdingResult = result.find((r) => r.fn === ReadFn.ReadHoldingRegisters)
       expect(holdingResult).toBeDefined()
       expect(holdingResult!.start).toBe(0)
       expect(holdingResult!.length).toBe(15)
 
       // 找到线圈结果
-      const coilResult = result.find((r) => r.type === ReadFn.ReadCoils)
+      const coilResult = result.find((r) => r.fn === ReadFn.ReadCoils)
       expect(coilResult).toBeDefined()
       expect(coilResult!.start).toBe(0)
       expect(coilResult!.length).toBe(15)
@@ -486,7 +503,7 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该处理单个选项', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 100, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 100, length: 5 },
       ]
 
       const result = factory.mergeRead(options)
@@ -498,9 +515,9 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该处理未排序输入', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 20, length: 5 },
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadHoldingRegisters, start: 8, length: 15 }, // 从 5 改为 8 以使其与 20 重叠
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 20, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 8, length: 15 }, // 从 5 改为 8 以使其与 20 重叠
       ]
 
       const result = factory.mergeRead(options)
@@ -512,8 +529,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该合并当一个区间包含另一个区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 20 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 5 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 20 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 5, length: 5 },
       ]
 
       const result = factory.mergeRead(options)
@@ -525,10 +542,10 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该按不同的读取类型分别处理', () => {
       const options: ReadOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadInputRegisters, start: 0, length: 10 },
-        { type: ReadFn.ReadCoils, start: 0, length: 10 },
-        { type: ReadFn.ReadDiscreteInputs, start: 0, length: 10 },
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadInputRegisters, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadCoils, unitId: 1, start: 0, length: 10 },
+        { fn: ReadFn.ReadDiscreteInputs, unitId: 1, start: 0, length: 10 },
       ]
 
       const result = factory.mergeRead(options)
@@ -539,10 +556,10 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该按 unitId 分组', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10, unitId: 1 },
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10, unitId: 2 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 5, length: 10, unitId: 1 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 5, length: 10, unitId: 2 },
       ]
 
       const result = factory.mergeRead(options)
@@ -564,8 +581,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('不应该合并不同 unitIds 的区间', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
       ]
 
       const result = factory.mergeRead(options)
@@ -577,8 +594,8 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该在未指定时使用默认 unitId', () => {
       const options: ReadHoldingRegistersOptions[] = [
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10 }, // 未指定 unitId，默认为 1
-        { type: ReadFn.ReadHoldingRegisters, start: 5, length: 10 }, // 未指定 unitId，默认为 1
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 10 }, // 未指定 unitId，默认为 1
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 5, length: 10 }, // 未指定 unitId，默认为 1
       ]
 
       const result = factory.mergeRead(options)
@@ -591,12 +608,12 @@ describe('ModbusTcpPacketFactory', () => {
     it('应该处理混合 unitId 场景', () => {
       const options: ReadOptions[] = [
         // 从站 1, 保持寄存器
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
-        { type: ReadFn.ReadHoldingRegisters, start: 8, length: 5, unitId: 1 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 1 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 8, length: 5, unitId: 1 },
         // 从站 2, 保持寄存器
-        { type: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
+        { fn: ReadFn.ReadHoldingRegisters, start: 0, length: 10, unitId: 2 },
         // 从站 1, 线圈
-        { type: ReadFn.ReadCoils, start: 0, length: 10, unitId: 1 },
+        { fn: ReadFn.ReadCoils, start: 0, length: 10, unitId: 1 },
       ]
 
       const result = factory.mergeRead(options)
@@ -605,20 +622,20 @@ describe('ModbusTcpPacketFactory', () => {
 
       // 从站 1, 保持寄存器 (已合并)
       const unit1Holding = result.find(
-        (r) => r.unitId === 1 && r.type === ReadFn.ReadHoldingRegisters,
+        (r) => r.unitId === 1 && r.fn === ReadFn.ReadHoldingRegisters,
       )
       expect(unit1Holding).toBeDefined()
       expect(unit1Holding!.length).toBe(13) // 0-12
 
       // 从站 2, 保持寄存器 (不与从站 1 合并)
       const unit2Holding = result.find(
-        (r) => r.unitId === 2 && r.type === ReadFn.ReadHoldingRegisters,
+        (r) => r.unitId === 2 && r.fn === ReadFn.ReadHoldingRegisters,
       )
       expect(unit2Holding).toBeDefined()
       expect(unit2Holding!.length).toBe(10)
 
       // 从站 1, 线圈 (不同类型)
-      const unit1Coils = result.find((r) => r.unitId === 1 && r.type === ReadFn.ReadCoils)
+      const unit1Coils = result.find((r) => r.unitId === 1 && r.fn === ReadFn.ReadCoils)
       expect(unit1Coils).toBeDefined()
       expect(unit1Coils!.length).toBe(10)
     })
@@ -627,7 +644,10 @@ describe('ModbusTcpPacketFactory', () => {
   describe('decodeResponse', () => {
     it('应该正确解码带有事务 ID 的响应', () => {
       const data = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x03, 0x02])
-      const result = factory.decodeResponse(data)
+      const result = factory.decodeResponse(
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 0, length: 1 },
+        data,
+      )
 
       expect(result.transactionId).toBe(0)
     })
@@ -636,12 +656,13 @@ describe('ModbusTcpPacketFactory', () => {
   describe('Edge cases', () => {
     it('应该正确处理大起始地址', () => {
       const options: ReadHoldingRegistersOptions = {
-        type: ReadFn.ReadHoldingRegisters,
+        fn: ReadFn.ReadHoldingRegisters,
+        unitId: 1,
         start: 49152, // 0xC000
         length: 1,
       }
 
-      const result = factory.encodeRead(options)
+      const result = factory.encodeRead(0, options)
 
       expect(result[8]).toBe(0xc0) // 起始地址高字节
       expect(result[9]).toBe(0x00) // 起始地址低字节
@@ -649,12 +670,13 @@ describe('ModbusTcpPacketFactory', () => {
 
     it('应该保留多字节值的字节顺序', () => {
       const options: WriteRegisterOptions = {
-        type: WriteFn.WriteSingleRegister,
+        fn: WriteFn.WriteSingleRegister,
+        unitId: 1,
         start: 0,
         value: 0x1234,
       }
 
-      const result = factory.encodeWrite(options)
+      const result = factory.encodeWrite(0, options)
 
       expect(result[10]).toBe(0x12) // 高字节在前
       expect(result[11]).toBe(0x34) // 低字节在后

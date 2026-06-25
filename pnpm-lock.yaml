@@ -189,6 +189,9 @@ importers:
 
   packages/protocol-mc-4e:
     devDependencies:
+      '@hmi-ts/core':
+        specifier: workspace:*
+        version: link:../core
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)

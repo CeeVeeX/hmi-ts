@@ -6,6 +6,7 @@ import {
   Mc4ePacketFactory,
   Mc4eSubCommand,
   Mc4eSubHeader,
+  type ReadBitOptions,
   type ReadWordOptions,
   type WriteWordOptions,
 } from '../src/index'
@@ -115,5 +116,39 @@ describe('Mc4ePacketFactory', () => {
 
     const rsp = factory.decodeResponse(opt, frame)
     expect(rsp.code).toBe(ResponseCode.ADDR_INVALID)
+  })
+
+  it('mergeRead should aggressively merge same device ranges within point limit', () => {
+    const reqs: ReadWordOptions[] = [
+      { unitId: 1, device: 'D', start: 0, length: 1 },
+      { unitId: 1, device: 'D', start: 100, length: 2 },
+      { unitId: 1, device: 'D', start: 300, length: 5 },
+    ]
+
+    const merged = factory.mergeRead(reqs) as ReadWordOptions[]
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 305 })
+  })
+
+  it('mergeRead should split when word point limit is exceeded', () => {
+    const reqs: ReadWordOptions[] = [
+      { unitId: 1, device: 'D', start: 0, length: 100 },
+      { unitId: 1, device: 'D', start: 950, length: 20 },
+    ]
+
+    const merged = factory.mergeRead(reqs) as ReadWordOptions[]
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 100 })
+    expect(merged[1]).toMatchObject({ unitId: 1, device: 'D', start: 950, length: 20 })
+  })
+
+  it('mergeRead should keep bit and word device groups separated', () => {
+    const reqs: Array<ReadWordOptions | ReadBitOptions> = [
+      { unitId: 1, device: 'D', start: 0, length: 10 },
+      { unitId: 1, device: 'M', start: 0, length: 10 },
+    ]
+
+    const merged = factory.mergeRead(reqs)
+    expect(merged).toHaveLength(2)
   })
 })

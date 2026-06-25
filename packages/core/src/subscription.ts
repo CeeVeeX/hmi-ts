@@ -21,20 +21,6 @@ export interface SubscriptionGroup extends SubscribeOptions {
 }
 
 /**
- * 合并后的读取区间。
- *
- * @example
- * ```ts
- * const range: MergedRange = { unitId: 1, start: 0, length: 10 }
- * ```
- */
-export interface MergedRange {
-  unitId: number
-  start: number
-  length: number
-}
-
-/**
  * 同一轮询周期的分组信息。
  *
  * @example
@@ -65,10 +51,6 @@ export interface SubscriptionEngineOptions<T extends PacketFactory> {
     options: Parameters<T['encodeRead']>[1],
   ) => Promise<IReadResponse<Parameters<T['encodeRead']>[1]>>
   onError?: (error: Error) => void
-}
-
-function makeRangeKey(unitId: number, start: number, length: number): string {
-  return `${unitId}:${start}:${length}`
 }
 
 /**
@@ -104,8 +86,6 @@ export class SubscriptionEngine<T extends PacketFactory> {
 
     const group = this.ensureGroup(sub.interval)
     group.subscriptions.set(id, sub)
-    // TODO: mergeSubscriptions 可能要放到报文库里实现
-    // MergedRange 改成 ReadOptions
     group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
 
     return () => {
@@ -168,36 +148,6 @@ export class SubscriptionEngine<T extends PacketFactory> {
     return created
   }
 
-  private mergeSubscriptions(subscriptions: Map<string, SubscriptionGroup>): MergedRange[] {
-    const ranges = [...subscriptions.values()].sort(
-      (a, b) => a.unitId - b.unitId || a.start - b.start,
-    )
-
-    const merged: MergedRange[] = []
-    for (const range of ranges) {
-      const prev = merged[merged.length - 1]
-      if (!prev || prev.unitId !== range.unitId) {
-        merged.push({ ...range })
-        continue
-      }
-
-      const prevEnd = prev.start + prev.length
-      const currentEnd = range.start + range.length
-      // 若新区间和上一区间重叠（或紧邻），合并成一个连续读取区间以减少请求次数。
-      if (range.start <= prevEnd) {
-        prev.length = Math.max(prevEnd, currentEnd) - prev.start
-      } else {
-        merged.push({ ...range })
-      }
-    }
-
-    const deduped = new Map<string, MergedRange>()
-    for (const range of merged) {
-      deduped.set(makeRangeKey(range.unitId, range.start, range.length), range)
-    }
-    return [...deduped.values()]
-  }
-
   private async runPollLoop(group: PollGroup): Promise<void> {
     let nextTickAt = Date.now()
     while (this.running && group.running) {
@@ -219,7 +169,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
       return
     }
 
-    group.mergedRanges = this.mergeSubscriptions(group.subscriptions)
+    group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
 
     for (const range of group.mergedRanges) {
       const res = await this.options.read(range)
