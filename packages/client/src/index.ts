@@ -12,6 +12,7 @@ import {
   SubscriptionEngine,
   type PartialBy,
   type IResponse,
+  type CommonOptions,
   QueueOverflowError,
 } from '@hmi-ts/core'
 
@@ -32,9 +33,23 @@ export interface ClientOptions<T> {
   defaultInterval?: number
 }
 
-interface InFlight<T extends IResponse> {
-  tk: RequestTask<T>
-  resolve: (response: T | PromiseLike<T>) => void
+export type ReadOptions<T extends PacketFactory> = Parameters<T['encodeRead']>[1]
+export type WriteOptions<T extends PacketFactory> = Parameters<T['encodeWrite']>[1]
+export type RequestOptions<T extends PacketFactory> = ReadOptions<T> | WriteOptions<T>
+type RequestResponse<T extends PacketFactory> =
+  | IReadResponse<ReadOptions<T>>
+  | IWriteResponse<WriteOptions<T>>
+type InFlightResponse<T extends PacketFactory> = IResponse<RequestOptions<T>>
+
+interface InFlightTask {
+  id: number
+  startAt: number
+  options: CommonOptions
+}
+
+interface InFlight<T extends PacketFactory> {
+  tk: InFlightTask
+  resolve: (response: InFlightResponse<T> | PromiseLike<InFlightResponse<T>>) => void
   reject: (error: Error) => void
 }
 
@@ -42,7 +57,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   private scheduler: RequestScheduler
   private sequence = 0
   private subscriptionEngine: SubscriptionEngine<T>
-  private inFlight: InFlight<IResponse> | null = null
+  private inFlight: InFlight<T> | null = null
   constructor(private readonly options: ClientOptions<T>) {
     super()
 
@@ -131,8 +146,8 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   }
 
   async write(
-    options: PartialBy<Parameters<T['encodeWrite']>[1], 'unitId'>,
-  ): Promise<IWriteResponse> {
+    options: PartialBy<WriteOptions<T>, 'unitId'>,
+  ): Promise<IWriteResponse<WriteOptions<T>>> {
     const tx = this.nextTx()
 
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
@@ -148,7 +163,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     const frame = this.options.packetFactory.encodeWrite(tx, opts)
 
     // 安排请求并等待响应
-    const response = await this.scheduleRequest<IWriteResponse>({
+    const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
       id: tx,
       priority: options?.priority ?? PRIORITY.write,
       timeout,
@@ -162,7 +177,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     return response
   }
 
-  async read(options: PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>): Promise<IReadResponse> {
+  async read(options: PartialBy<ReadOptions<T>, 'unitId'>): Promise<IReadResponse<ReadOptions<T>>> {
     const tx = this.nextTx()
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
@@ -177,7 +192,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     const frame: Uint8Array = this.options.packetFactory.encodeRead(tx, opts)
 
     // 安排请求并等待响应
-    const response = await this.scheduleRequest<IReadResponse>({
+    const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
       id: tx,
       priority: options?.priority ?? PRIORITY.read,
       timeout,
@@ -194,7 +209,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   subscribe(
     options: PartialBy<SubscribeOptions, 'unitId'> &
       PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>,
-  ) {
+  ): ReturnType<SubscriptionEngine<T>['subscribe']> {
     const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
     const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
     // 报文合并必须满足, unitId 一致, interval 一致
@@ -206,7 +221,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     })
   }
 
-  private async scheduleRequest<T extends IResponse>(task: RequestTask<T>): Promise<T> {
+  private async scheduleRequest<R extends RequestResponse<T>>(task: RequestTask<R>): Promise<R> {
     try {
       return await this.scheduler.schedule(task)
     } catch (error) {
@@ -225,18 +240,22 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     }
   }
 
-  private async performRequest<T extends IResponse>(
-    tk: RequestTask<T>,
+  private async performRequest<R extends RequestResponse<T>>(
+    tk: RequestTask<R>,
     frame: Uint8Array,
-  ): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
+  ): Promise<R> {
+    return new Promise<R>((resolve, reject) => {
       // 当前客户端假设“单连接串行请求”：任何时刻仅保留一个 inFlight。
       // 该约束由 RequestScheduler 保证，避免响应乱序匹配。
       this.inFlight = {
-        tk,
-        resolve,
+        tk: {
+          id: tk.id,
+          startAt: tk.startAt,
+          options: tk.options,
+        },
+        resolve: (response) => resolve(response as unknown as R),
         reject,
-      } as unknown as InFlight<IResponse>
+      }
 
       void this.options.transport.send(frame).catch((error) => {
         this.inFlight = null
