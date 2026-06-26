@@ -31,7 +31,7 @@ export enum RequestMethod {
 export interface IBaseResponse<T extends CommonOptions = CommonOptions> {
   transactionId: number
   method: RequestMethod
-  row?: Uint8Array
+  responseFrame?: Uint8Array
   code: ResponseCode
   startAt: number
   endAt: number
@@ -41,6 +41,7 @@ export interface IBaseResponse<T extends CommonOptions = CommonOptions> {
 export interface IReadResponseSuccess<T extends BaseReadOptions> extends IBaseResponse<T> {
   code: ResponseCode.SUCCESS
   method: RequestMethod.READ
+  responseFrame: Uint8Array
   data: Uint8Array
   byteCount: number
 }
@@ -48,16 +49,19 @@ export interface IReadResponseSuccess<T extends BaseReadOptions> extends IBaseRe
 export interface IWriteResponseSuccess<T extends BaseWriteOptions> extends IBaseResponse<T> {
   code: ResponseCode.SUCCESS
   method: RequestMethod.WRITE
+  responseFrame: Uint8Array
 }
 
 export interface IReadResponseError<T extends BaseReadOptions> extends IBaseResponse<T> {
   code: Exclude<ResponseCode, ResponseCode.SUCCESS>
   method: RequestMethod.READ
+  responseFrame?: Uint8Array
 }
 
 export interface IWriteResponseError<T extends BaseWriteOptions> extends IBaseResponse<T> {
   code: Exclude<ResponseCode, ResponseCode.SUCCESS>
   method: RequestMethod.WRITE
+  responseFrame?: Uint8Array
 }
 
 export type IReadResponse<T extends BaseReadOptions> =

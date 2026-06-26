@@ -1,24 +1,7 @@
-import type { BaseReadOptions, SubscribeOptions } from './options'
-import type { PacketFactory } from './packet'
+import type { GetPFR, PacketFactory, SubscribeOptions, SubscriptionGroup } from './packet'
 import { ResponseCode, type IReadResponse } from './response'
+import type { PartialBy } from './type'
 import { sleep, uint8ArrayEquals } from './utils'
-
-/**
- * 带上次数据快照的订阅对象。
- *
- * @example
- * ```ts
- * const group: SubscriptionGroup = {
- *   id: 'sub-1', unitId: 1, start: 0, length: 2, interval: 500,
- *   callback: () => {}, lastData: [1, 2],
- * }
- * ```
- */
-export interface SubscriptionGroup extends SubscribeOptions {
-  id: string
-  interval: number
-  lastData?: Uint8Array
-}
 
 /**
  * 同一轮询周期的分组信息。
@@ -28,10 +11,10 @@ export interface SubscriptionGroup extends SubscribeOptions {
  * const g: PollGroup = { interval: 500, subscriptions: new Map(), mergedRanges: [], running: false }
  * ```
  */
-export interface PollGroup {
+export interface PollGroup<T extends PacketFactory = PacketFactory> {
   interval: number
-  subscriptions: Map<string, SubscriptionGroup>
-  mergedRanges: BaseReadOptions[]
+  subscriptions: Map<string, SubscriptionGroup<T>>
+  mergedRanges: GetPFR<T>[]
   running: boolean
 }
 
@@ -47,9 +30,7 @@ export interface PollGroup {
  */
 export interface SubscriptionEngineOptions<T extends PacketFactory> {
   packetFactory: T
-  read: (
-    options: Parameters<T['encodeRead']>[1],
-  ) => Promise<IReadResponse<Parameters<T['encodeRead']>[1]>>
+  read: (options: GetPFR<T>) => Promise<IReadResponse<GetPFR<T>>>
   onError?: (error: Error) => void
 }
 
@@ -70,27 +51,30 @@ export interface SubscriptionEngineOptions<T extends PacketFactory> {
  * ```
  */
 export class SubscriptionEngine<T extends PacketFactory> {
-  private groups = new Map<number, PollGroup>()
+  private groups = new Map<number, PollGroup<T>>()
   private running = false
   private seq = 0
 
   constructor(private readonly options: SubscriptionEngineOptions<T>) {}
 
-  subscribe(params: SubscribeOptions): () => void {
+  subscribe(params: PartialBy<SubscribeOptions<T>, 'id'>): () => void {
     const id = `sub-${++this.seq}`
-    const sub: SubscriptionGroup = {
+    const sub = {
       ...params,
-      interval: params.interval ?? 0,
       id,
-    }
+    } as SubscriptionGroup<T>
 
     const group = this.ensureGroup(sub.interval)
     group.subscriptions.set(id, sub)
-    group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
+    group.mergedRanges = this.options.packetFactory.mergeRead([
+      ...group.subscriptions.values(),
+    ]) as GetPFR<T>[]
 
     return () => {
       group.subscriptions.delete(id)
-      group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
+      group.mergedRanges = this.options.packetFactory.mergeRead([
+        ...group.subscriptions.values(),
+      ]) as GetPFR<T>[]
     }
   }
 
@@ -114,7 +98,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     }
   }
 
-  getPollGroups(): PollGroup[] {
+  getPollGroups(): PollGroup<T>[] {
     return [...this.groups.values()].map((group) => ({
       ...group,
       subscriptions: new Map(group.subscriptions),
@@ -122,7 +106,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     }))
   }
 
-  private ensureGroup(interval: number): PollGroup {
+  private ensureGroup(interval: number): PollGroup<T> {
     const found = this.groups.get(interval)
     if (found) {
       if (this.running && !found.running) {
@@ -132,7 +116,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
       return found
     }
 
-    const created: PollGroup = {
+    const created: PollGroup<T> = {
       interval,
       subscriptions: new Map(),
       mergedRanges: [],
@@ -148,7 +132,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     return created
   }
 
-  private async runPollLoop(group: PollGroup): Promise<void> {
+  private async runPollLoop(group: PollGroup<T>): Promise<void> {
     let nextTickAt = Date.now()
     while (this.running && group.running) {
       // 固定周期调度：用理论下次时间减当前时间，避免误差累计漂移。
@@ -164,12 +148,14 @@ export class SubscriptionEngine<T extends PacketFactory> {
     }
   }
 
-  private async pollGroup(group: PollGroup): Promise<void> {
+  private async pollGroup(group: PollGroup<T>): Promise<void> {
     if (group.subscriptions.size === 0) {
       return
     }
 
-    group.mergedRanges = this.options.packetFactory.mergeRead([...group.subscriptions.values()])
+    group.mergedRanges = this.options.packetFactory.mergeRead([
+      ...group.subscriptions.values(),
+    ]) as GetPFR<T>[]
 
     for (const range of group.mergedRanges) {
       const res = await this.options.read(range)
@@ -185,7 +171,14 @@ export class SubscriptionEngine<T extends PacketFactory> {
           continue
         }
 
-        const chunk = this.options.packetFactory.sliceReadResponse(sub, res)
+        const chunk = (() => {
+          try {
+            return this.options.packetFactory.sliceReadResponse(sub, res)
+          } catch (error) {
+            console.warn(error)
+            return null
+          }
+        })()
 
         if (!chunk) {
           console.warn(`sub ${sub.id} sliceReadResponse returned null, skipping callback.`)

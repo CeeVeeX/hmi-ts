@@ -135,7 +135,7 @@ async function main(): Promise<void> {
         return
       }
 
-      console.log(data.data)
+      console.log(data.options.frame)
 
       console.log(
         '1请求耗时:',

@@ -11,6 +11,7 @@ import type { CommonOptions } from './options'
  *   timeout: 1000,
  *   startAt: Date.now(),
  *   options: CommonOptions,
+ *   frame: new Uint8Array(),
  *   execute: async () => 123,
  *   resolve: () => {},
  *   reject: () => {},
@@ -19,9 +20,6 @@ import type { CommonOptions } from './options'
  */
 export interface RequestTask<T = unknown> {
   id: number
-  priority: number
-  timeout: number
-  startAt: number
   options: CommonOptions
   execute(startAt: RequestTask<T>): Promise<T>
   resolve(value: T): void

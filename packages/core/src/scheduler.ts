@@ -49,16 +49,15 @@ export class RequestScheduler {
 
   schedule<T>(task: RequestTask<T>): Promise<T> {
     if (this.closed) {
-      return Promise.reject(new ConnectionClosedError('scheduler is closed'))
+      return Promise.reject(new ConnectionClosedError('调度程序已关闭'))
     }
 
     // 检查队列是否已满（执行中的任务 + 队列中的任务）
     const totalPending = (this.inFlight ? 1 : 0) + this.queue.length
+
     if (totalPending >= this.maxQueueSize) {
       return Promise.reject(
-        new QueueOverflowError(
-          `request queue is full (${totalPending}/${this.maxQueueSize}), please retry later`,
-        ),
+        new QueueOverflowError(`请求队列已满 (${totalPending}/${this.maxQueueSize}), 请稍后重试`),
       )
     }
 
@@ -70,7 +69,7 @@ export class RequestScheduler {
       }
       this.queue.push(wrapped)
       // 写请求通常比读请求更紧急；同优先级下按 id 保证顺序稳定。
-      this.queue.sort((a, b) => b.priority - a.priority || a.id - b.id)
+      this.queue.sort((a, b) => b.options.priority - a.options.priority || a.id - b.id)
       this.scheduleDispatch()
     })
   }
@@ -103,7 +102,7 @@ export class RequestScheduler {
       // 注意：若 execute 先完成，超时计时器仍会在后台触发一次 reject，
       // 但不会影响已 settle 的 race 结果；这里以实现简洁为先。
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new TimeoutError(`task ${task.id} timeout`)), task.timeout)
+        setTimeout(() => reject(new TimeoutError(`task ${task.id} timeout`)), task.options.timeout)
       })
 
       // 任意 Promise 执行结果都会触发 resolve，若 execute 先完成，超时计时器仍会在后台触发一次 reject，但不会影响已

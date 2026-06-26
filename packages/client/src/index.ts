@@ -5,7 +5,6 @@ import {
   type IWriteResponse,
   type PacketFactory,
   type RequestTask,
-  type SubscribeOptions,
   type Transport,
   PRIORITY,
   RequestScheduler,
@@ -13,6 +12,9 @@ import {
   type PartialBy,
   type IResponse,
   QueueOverflowError,
+  type ReadOptions,
+  type WriteOptions,
+  type SubscribeOptions,
 } from '@hmi-ts/core'
 
 export interface ClientEvent {
@@ -32,17 +34,16 @@ export interface ClientOptions<T> {
   defaultInterval?: number
 }
 
-export type ReadOptions<T extends PacketFactory> = Parameters<T['encodeRead']>[1]
-export type WriteOptions<T extends PacketFactory> = Parameters<T['encodeWrite']>[1]
 export type RequestOptions<T extends PacketFactory> = ReadOptions<T> | WriteOptions<T>
+
 type RequestResponse<T extends PacketFactory> =
   | IReadResponse<ReadOptions<T>>
   | IWriteResponse<WriteOptions<T>>
+
 type InFlightResponse<T extends PacketFactory> = IResponse<RequestOptions<T>>
 
 interface InFlightTask<T extends PacketFactory> {
   id: number
-  startAt: number
   options: RequestOptions<T>
 }
 
@@ -80,7 +81,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
           // inFlight 用来确保按顺序匹配
           this.inFlight.resolve({
             ...response,
-            startAt: this.inFlight.tk.startAt,
+            startAt: this.inFlight.tk.options.startAt,
             endAt: Date.now(),
           } as InFlightResponse<T>)
           this.inFlight = null
@@ -145,30 +146,27 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   }
 
   async write(
-    options: PartialBy<WriteOptions<T>, 'unitId'>,
+    options: PartialBy<WriteOptions<T>, 'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame'>,
   ): Promise<IWriteResponse<WriteOptions<T>>> {
     const tx = this.nextTx()
 
-    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options.priority = options?.priority ?? PRIORITY.write
+    options.startAt = Date.now()
 
-    const opts = {
-      ...options,
-      unitId,
-      timeout,
+    const opts = options as WriteOptions<T>
+
+    if (!opts.frame) {
+      // 构建帧
+      opts.frame = this.options.packetFactory.encodeWrite(tx, opts)
     }
-
-    // 构建帧
-    const frame = this.options.packetFactory.encodeWrite(tx, opts)
 
     // 安排请求并等待响应
     const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
       id: tx,
-      priority: options?.priority ?? PRIORITY.write,
-      timeout,
       options: opts,
-      startAt: Date.now(),
-      execute: (task) => this.performRequest(task, frame),
+      execute: (task) => this.performRequest(task),
       resolve: () => {},
       reject: () => {},
     })
@@ -176,28 +174,28 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     return response
   }
 
-  async read(options: PartialBy<ReadOptions<T>, 'unitId'>): Promise<IReadResponse<ReadOptions<T>>> {
+  async read(
+    options: PartialBy<ReadOptions<T>, 'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame'>,
+  ): Promise<IReadResponse<ReadOptions<T>>> {
     const tx = this.nextTx()
-    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
 
-    const opts = {
-      ...options,
-      unitId,
-      timeout,
+    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options.priority = options?.priority ?? PRIORITY.write
+    options.startAt = Date.now()
+
+    const opts = options as ReadOptions<T>
+
+    if (!opts.frame) {
+      // 构建帧
+      opts.frame = this.options.packetFactory.encodeRead(tx, opts)
     }
-
-    // 构建帧
-    const frame: Uint8Array = this.options.packetFactory.encodeRead(tx, opts)
 
     // 安排请求并等待响应
     const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
       id: tx,
-      priority: options?.priority ?? PRIORITY.read,
-      timeout,
       options: opts,
-      startAt: Date.now(),
-      execute: (task) => this.performRequest(task, frame),
+      execute: (task) => this.performRequest(task),
       resolve: () => {},
       reject: () => {},
     })
@@ -206,18 +204,23 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   }
 
   subscribe(
-    options: PartialBy<SubscribeOptions, 'unitId'> &
-      PartialBy<Parameters<T['encodeRead']>[1], 'unitId'>,
-  ): ReturnType<SubscriptionEngine<T>['subscribe']> {
-    const unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-    const timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options: PartialBy<
+      SubscribeOptions<T>,
+      'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame' | 'id' | 'interval'
+    >,
+  ) {
+    const opts = {
+      ...options,
+      unitId: options.unitId ?? this.options.defaultUnitId ?? 1,
+      timeout: options.timeout ?? this.options.defaultTimeout ?? 1000,
+      priority: options.priority ?? PRIORITY.write,
+      startAt: options.startAt ?? Date.now(),
+      interval: options.interval ?? this.options.defaultInterval ?? 0,
+    } as PartialBy<SubscribeOptions<T>, 'id'>
+
     // 报文合并必须满足, unitId 一致, interval 一致
     // subscriptionEngine 里实现了报文合并功能
-    return this.subscriptionEngine.subscribe({
-      ...options,
-      unitId,
-      timeout,
-    })
+    return this.subscriptionEngine.subscribe(opts)
   }
 
   private async scheduleRequest<R extends RequestResponse<T>>(task: RequestTask<R>): Promise<R> {
@@ -239,24 +242,20 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     }
   }
 
-  private async performRequest<R extends RequestResponse<T>>(
-    tk: RequestTask<R>,
-    frame: Uint8Array,
-  ): Promise<R> {
+  private async performRequest<R extends RequestResponse<T>>(tk: RequestTask<R>): Promise<R> {
     return new Promise<R>((resolve, reject) => {
       // 当前客户端假设“单连接串行请求”：任何时刻仅保留一个 inFlight。
       // 该约束由 RequestScheduler 保证，避免响应乱序匹配。
       this.inFlight = {
         tk: {
           id: tk.id,
-          startAt: tk.startAt,
           options: tk.options as RequestOptions<T>,
         },
         resolve: (response) => resolve(response as unknown as R),
         reject,
       }
 
-      void this.options.transport.send(frame).catch((error) => {
+      void this.options.transport.send(tk.options.frame).catch((error) => {
         this.inFlight = null
         reject(error as Error)
       })

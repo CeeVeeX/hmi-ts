@@ -22,8 +22,6 @@ import {
   parseModbusTcpResponse,
 } from './encode'
 
-import { uint8ToHex } from '@hmi-ts/codec'
-
 export {
   ReadFn,
   WriteFn,
@@ -37,7 +35,10 @@ export {
 }
 
 // -------------------------- 工厂类 --------------------------
-export class ModbusTcpPacketFactory implements PacketFactory {
+export class ModbusTcpPacketFactory<
+  R extends ReadOptions = ReadOptions,
+  W extends WriteOptions = WriteOptions,
+> implements PacketFactory<R, W> {
   /**
    * 获取事务ID
    * @param sequence 序列号
@@ -56,7 +57,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
     return sequence & 0xffff // 事务ID为16位
   }
 
-  encodeRead(transactionId: number, options: ReadOptions): Uint8Array {
+  encodeRead(transactionId: number, options: R): Uint8Array {
     const { fn } = options
     switch (fn) {
       case ReadFn.ReadCoils:
@@ -72,7 +73,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
     }
   }
 
-  encodeWrite(transactionId: number, options: WriteOptions): Uint8Array {
+  encodeWrite(transactionId: number, options: W): Uint8Array {
     switch (options.fn) {
       case WriteFn.WriteSingleCoil:
         return encodeWriteSingleCoil(transactionId, options)
@@ -85,18 +86,18 @@ export class ModbusTcpPacketFactory implements PacketFactory {
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const _exhaustive: never = options
-        throw new Error(`未知写入功能码: ${(options as WriteOptions).fn}`)
+        throw new Error(`未知写入功能码: ${(options as W).fn}`)
       }
     }
   }
 
-  mergeRead(options: ReadOptions[]): ReadOptions[] {
+  mergeRead(options: R[]): R[] {
     if (!options || options.length === 0) {
       return []
     }
 
     // 按 unitId 和 fn 分组
-    const grouped = new Map<string, ReadOptions[]>()
+    const grouped = new Map<string, R[]>()
     for (const opt of options) {
       const unitId = opt.unitId ?? 1 // 默认 unitId 为 1
       const key = `${unitId}:${opt.fn}`
@@ -105,7 +106,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
       grouped.set(key, existing)
     }
 
-    const merged: ReadOptions[] = []
+    const merged: R[] = []
 
     // 对每组进行合并
     for (const [, group] of grouped) {
@@ -151,7 +152,7 @@ export class ModbusTcpPacketFactory implements PacketFactory {
    * const dataChunk = packetFactory.sliceReadResponse(options, response)
    * ```
    */
-  sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {
+  sliceReadResponse(options: R, response: IResponse<R>): Uint8Array | null {
     if (response.method !== RequestMethod.READ) {
       throw new Error(`响应方法与请求不匹配: ${response.method}`)
     }
@@ -198,51 +199,60 @@ export class ModbusTcpPacketFactory implements PacketFactory {
 
     if (startIndex < 0 || endIndex > data.length) {
       throw new Error(
-        `截取范围超出响应数据长度: startIndex=${startIndex}, endIndex=${endIndex}, dataLength=${data.length}, data: ${uint8ToHex(response.row!)}`,
+        `截取范围超出响应数据长度: startIndex=${startIndex}, endIndex=${endIndex}, dataLength=${data.length}`,
       )
     }
 
     return data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(
-    options: ReadOptions | WriteOptions,
-    d: Uint8Array,
-  ): IRowResponse<ReadOptions | WriteOptions> {
+  decodeResponse(options: R | W, d: Uint8Array): IRowResponse<R | W> {
     const { fn } = options
-    const { transactionId, data, byteCount, exceptionCode } = parseModbusTcpResponse(d)
+    const { transactionId, functionCode, data, byteCount, exceptionCode } =
+      parseModbusTcpResponse(d)
 
     const method = getMethodByFnCode(fn)
 
     if (exceptionCode !== null) {
       // 异常响应
       return {
-        options: options,
+        options,
         transactionId,
         method,
-        row: d,
+        responseFrame: d,
         code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      } as IRowResponse<R | W>
+    }
+
+    // 防御性校验：响应功能码必须与请求功能码一致，避免错误切片。
+    if (functionCode !== fn) {
+      return {
+        options,
+        transactionId,
+        method,
+        responseFrame: d,
+        code: ResponseCode.RESPONSE_INVALID,
+      } as IRowResponse<R | W>
     }
 
     if (method === RequestMethod.READ) {
       return {
-        options: options,
+        options,
         transactionId,
         method,
-        row: d,
+        responseFrame: d,
         code: ResponseCode.SUCCESS,
         data, // 仅返回数据部分，去掉 MBAP 头和 PDU 功能码
         byteCount,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      } as IRowResponse<R | W>
     } else {
       return {
-        options: options,
+        options,
         transactionId,
         method,
-        row: d,
+        responseFrame: d,
         code: ResponseCode.SUCCESS,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      } as IRowResponse<R | W>
     }
   }
 }

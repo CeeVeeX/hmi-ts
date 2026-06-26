@@ -1,10 +1,10 @@
-import type { IReadResponse } from './response'
-
 export interface CommonOptions {
   start: number
   unitId: number
-  timeout?: number
-  priority?: number
+  frame: Uint8Array
+  timeout: number
+  priority: number
+  startAt: number
 }
 
 export interface BaseWriteOptions extends CommonOptions {
@@ -20,9 +20,4 @@ export interface BaseReadOptions extends CommonOptions {
   length: number
 }
 
-export interface SubscribeOptions extends BaseReadOptions {
-  interval?: number
-  callback: (data: IReadResponse<BaseReadOptions>) => void
-}
-
-export type IOptions = BaseWriteOptions | BaseReadOptions | SubscribeOptions
+export type IOptions = BaseWriteOptions | BaseReadOptions

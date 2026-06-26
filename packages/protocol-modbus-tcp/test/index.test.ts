@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ResponseCode } from '@hmi-ts/core'
 import {
   ModbusTcpPacketFactory,
   ReadFn,
@@ -658,6 +659,17 @@ describe('ModbusTcpPacketFactory', () => {
       )
 
       expect(result.transactionId).toBe(0)
+    })
+
+    it('当响应功能码和请求功能码不一致时应该返回 RESPONSE_INVALID', () => {
+      // 帧示例：事务ID=0x04db, unitId=1, fn=0x01(ReadCoils), byteCount=1, data=0x23
+      const data = new Uint8Array([0x04, 0xdb, 0x00, 0x00, 0x00, 0x04, 0x01, 0x01, 0x01, 0x23])
+      const result = factory.decodeResponse(
+        { fn: ReadFn.ReadHoldingRegisters, unitId: 1, start: 100, length: 2 },
+        data,
+      )
+
+      expect(result.code).toBe(ResponseCode.RESPONSE_INVALID)
     })
   })
 
