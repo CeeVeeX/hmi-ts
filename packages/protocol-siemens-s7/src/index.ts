@@ -6,6 +6,8 @@ import {
   type PacketFactory,
   RequestMethod,
   ResponseCode,
+  type SubscriptionGroup,
+  type SubscriptionRelation,
 } from '@hmi-ts/core'
 
 const S7_PROTOCOL_ID = 0x32
@@ -266,6 +268,48 @@ export class SiemensS7PacketFactory implements PacketFactory {
     }
 
     return merged
+  }
+
+  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+    if (options.length === 0) {
+      return []
+    }
+
+    const grouped = new Map<string, SubscriptionGroup[]>()
+    for (const option of options) {
+      const key = `${option.unitId}:${option.area}:${option.dbNumber ?? 0}`
+      const group = grouped.get(key) ?? []
+      group.push(option)
+      grouped.set(key, group)
+    }
+
+    const relations: SubscriptionRelation[] = []
+
+    for (const [, group] of grouped) {
+      const sorted = [...group].sort((a, b) => a.start - b.start)
+      let currentRange = { ...sorted[0] } as ReadOptions
+      let currentSubscriptions = [sorted[0]]
+
+      for (let i = 1; i < sorted.length; i += 1) {
+        const next = sorted[i]
+        const currentEnd = currentRange.start + currentRange.length
+        const nextEnd = next.start + next.length
+        const mergedLength = Math.max(currentEnd, nextEnd) - currentRange.start
+
+        if (currentEnd >= next.start && mergedLength <= READ_MAX_BYTES) {
+          currentRange.length = mergedLength
+          currentSubscriptions.push(next)
+        } else {
+          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+          currentRange = { ...next } as ReadOptions
+          currentSubscriptions = [next]
+        }
+      }
+
+      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+    }
+
+    return relations
   }
 
   sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {

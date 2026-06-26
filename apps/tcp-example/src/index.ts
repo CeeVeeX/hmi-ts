@@ -71,35 +71,35 @@ async function main(): Promise<void> {
   //   }
   // }, 1000)
 
-  client.subscribe({
-    fn: ReadFn.ReadHoldingRegisters,
-    start: 100,
-    length: 2,
-    // interval: 2000,
-    callback: (data) => {
-      if (data.code !== ResponseCode.SUCCESS) {
-        console.error('subscribe data error:', data)
-        return
-      }
+  // client.subscribe({
+  //   fn: ReadFn.ReadHoldingRegisters,
+  //   start: 100,
+  //   length: 2,
+  //   // interval: 2000,
+  //   callback: (data) => {
+  //     if (data.code !== ResponseCode.SUCCESS) {
+  //       console.error('subscribe data error:', data)
+  //       return
+  //     }
 
-      console.log(`1请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeInt32(data.data))
-    },
-  })
+  //     console.log(`1请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeInt32(data.data))
+  //   },
+  // })
 
-  client.subscribe({
-    fn: ReadFn.ReadHoldingRegisters,
-    start: 102,
-    length: 2,
-    // interval: 2000,
-    callback: (data) => {
-      if (data.code !== ResponseCode.SUCCESS) {
-        console.error('subscribe data error:', data)
-        return
-      }
+  // client.subscribe({
+  //   fn: ReadFn.ReadHoldingRegisters,
+  //   start: 102,
+  //   length: 2,
+  //   // interval: 2000,
+  //   callback: (data) => {
+  //     if (data.code !== ResponseCode.SUCCESS) {
+  //       console.error('subscribe data error:', data)
+  //       return
+  //     }
 
-      console.log(`2请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeInt32(data.data))
-    },
-  })
+  //     console.log(`2请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeInt32(data.data))
+  //   },
+  // })
 
   // for (let i = 0; i < 10; i++) {
   //   client.subscribe({
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
         return
       }
 
-      console.log(data.options.frame)
+      console.log(data.options)
 
       console.log(
         '1请求耗时:',
@@ -148,26 +148,26 @@ async function main(): Promise<void> {
     },
   })
 
-  client.subscribe({
-    fn: ReadFn.ReadCoils,
-    start: 4,
-    length: 2,
-    // interval: 2000,
-    callback: (data) => {
-      if (data.code !== ResponseCode.SUCCESS) {
-        console.error('subscribe data error:', data)
-        return
-      }
+  // client.subscribe({
+  //   fn: ReadFn.ReadCoils,
+  //   start: 4,
+  //   length: 2,
+  //   // interval: 2000,
+  //   callback: (data) => {
+  //     if (data.code !== ResponseCode.SUCCESS) {
+  //       console.error('subscribe data error:', data)
+  //       return
+  //     }
 
-      console.log(
-        '2请求耗时:',
-        data.endAt - data.startAt,
-        'ms',
-        '数据:',
-        decodeBinaryString(data.data, data.options.length),
-      )
-    },
-  })
+  //     console.log(
+  //       '2请求耗时:',
+  //       data.endAt - data.startAt,
+  //       'ms',
+  //       '数据:',
+  //       decodeBinaryString(data.data, data.options.length),
+  //     )
+  //   },
+  // })
 
   try {
     setInterval(() => {}, 9999)

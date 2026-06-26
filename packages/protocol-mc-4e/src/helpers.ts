@@ -1,4 +1,4 @@
-import { ResponseCode } from '@hmi-ts/core'
+import { ResponseCode, type SubscriptionGroup, type SubscriptionRelation } from '@hmi-ts/core'
 import {
   Mc4eCommand,
   Mc4eDeviceCode,
@@ -285,4 +285,63 @@ export function mergeReadOptions(options: Mc4eReadOptions[]): Mc4eReadOptions[] 
   }
 
   return merged
+}
+
+export function mergeSubscriptionRelations(
+  options: SubscriptionGroup[],
+): SubscriptionRelation[] {
+  if (options.length === 0) {
+    return []
+  }
+
+  const grouped = new Map<string, SubscriptionGroup[]>()
+  for (const option of options) {
+    const readOption = option as Mc4eReadOptions
+    const route = readOption.route ?? {}
+    const key = [
+      readOption.device.toUpperCase(),
+      route.networkNo ?? DEFAULT_NETWORK_NO,
+      route.plcNo ?? DEFAULT_PLC_NO,
+      route.ioNo ?? DEFAULT_IO_NO,
+      route.stationNo ?? readOption.unitId,
+    ].join(':')
+
+    const group = grouped.get(key)
+    if (group) {
+      group.push(option)
+    } else {
+      grouped.set(key, [option])
+    }
+  }
+
+  const relations: SubscriptionRelation[] = []
+
+  for (const [, group] of grouped) {
+    const sorted = [...group].sort((a, b) => a.start - b.start)
+    let currentRange = { ...sorted[0] } as Mc4eReadOptions
+    let currentSubscriptions = [sorted[0]]
+    const maxPoints = isBitDevice((currentRange as Mc4eReadOptions).device)
+      ? MAX_BIT_POINTS_PER_REQUEST
+      : MAX_WORD_POINTS_PER_REQUEST
+
+    for (let i = 1; i < sorted.length; i += 1) {
+      const next = sorted[i] as Mc4eReadOptions
+      const nextEnd = next.start + next.length
+      const mergedLength = nextEnd - currentRange.start
+
+      // MC 4E 批量读允许读取连续区间，适度“补洞”可以减少报文数。
+      if (mergedLength <= maxPoints) {
+        currentRange.length = mergedLength
+        currentSubscriptions.push(sorted[i])
+      } else {
+        relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+        currentRange = { ...next }
+        currentSubscriptions = [sorted[i]]
+      }
+    }
+
+    relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+  }
+
+  return relations
 }

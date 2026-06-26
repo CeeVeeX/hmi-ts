@@ -1,4 +1,10 @@
-import type { GetPFR, PacketFactory, SubscribeOptions, SubscriptionGroup } from './packet'
+import type {
+  GetPFR,
+  PacketFactory,
+  SubscribeOptions,
+  SubscriptionGroup,
+  SubscriptionRelation,
+} from './packet'
 import { ResponseCode, type IReadResponse } from './response'
 import type { PartialBy } from './type'
 import { sleep, uint8ArrayEquals } from './utils'
@@ -8,13 +14,13 @@ import { sleep, uint8ArrayEquals } from './utils'
  *
  * @example
  * ```ts
- * const g: PollGroup = { interval: 500, subscriptions: new Map(), mergedRanges: [], running: false }
+ * const g: PollGroup = { interval: 500, subscriptions: new Map(), relations: [], running: false }
  * ```
  */
 export interface PollGroup<T extends PacketFactory = PacketFactory> {
   interval: number
   subscriptions: Map<string, SubscriptionGroup<T>>
-  mergedRanges: GetPFR<T>[]
+  relations: SubscriptionRelation<T>[]
   running: boolean
 }
 
@@ -66,15 +72,15 @@ export class SubscriptionEngine<T extends PacketFactory> {
 
     const group = this.ensureGroup(sub.interval)
     group.subscriptions.set(id, sub)
-    group.mergedRanges = this.options.packetFactory.mergeRead([
+    group.relations = this.options.packetFactory.mergeSubscriptionRelations([
       ...group.subscriptions.values(),
-    ]) as GetPFR<T>[]
+    ])
 
     return () => {
       group.subscriptions.delete(id)
-      group.mergedRanges = this.options.packetFactory.mergeRead([
+      group.relations = this.options.packetFactory.mergeSubscriptionRelations([
         ...group.subscriptions.values(),
-      ]) as GetPFR<T>[]
+      ])
     }
   }
 
@@ -102,7 +108,10 @@ export class SubscriptionEngine<T extends PacketFactory> {
     return [...this.groups.values()].map((group) => ({
       ...group,
       subscriptions: new Map(group.subscriptions),
-      mergedRanges: [...group.mergedRanges],
+      relations: group.relations.map((relation) => ({
+        range: { ...relation.range },
+        subscriptions: [...relation.subscriptions],
+      })),
     }))
   }
 
@@ -119,7 +128,7 @@ export class SubscriptionEngine<T extends PacketFactory> {
     const created: PollGroup<T> = {
       interval,
       subscriptions: new Map(),
-      mergedRanges: [],
+      relations: [],
       running: false,
     }
     this.groups.set(interval, created)
@@ -153,23 +162,23 @@ export class SubscriptionEngine<T extends PacketFactory> {
       return
     }
 
-    group.mergedRanges = this.options.packetFactory.mergeRead([
+    group.relations = this.options.packetFactory.mergeSubscriptionRelations([
       ...group.subscriptions.values(),
-    ]) as GetPFR<T>[]
+    ]) as SubscriptionRelation<T>[]
 
-    for (const range of group.mergedRanges) {
-      const res = await this.options.read(range)
+    for (const relation of group.relations) {
+      const { range } = relation
+      // frame 在内部生成，range 没有 frame 属性
+      const res = (await this.options.read(
+        range as unknown as GetPFR<T>,
+      )) as unknown as IReadResponse<SubscribeOptions<T>>
 
       if (res.code !== ResponseCode.SUCCESS) continue
 
       // console.log('data:', uint8ToHex(res.data))
 
-      for (const sub of group.subscriptions.values()) {
+      for (const sub of relation.subscriptions) {
         // console.log(sub)
-
-        if (sub.unitId !== range.unitId) {
-          continue
-        }
 
         const chunk = (() => {
           try {
@@ -190,11 +199,19 @@ export class SubscriptionEngine<T extends PacketFactory> {
         // 只在数据发生变化时触发回调，避免高频重复通知。
         if (!sub.lastData || !uint8ArrayEquals(sub.lastData, chunk)) {
           sub.lastData = chunk
-          sub.callback({
+          const d = {
             ...res,
-            options: sub,
             data: chunk,
-          })
+          }
+
+          // 删除内部属性，避免回调中访问到不相关的字段。
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          delete (d.options as any).callback
+          // delete (d.options as any).lastData
+          // delete (d.options as any).interval
+          // delete (d.options as any).id
+
+          sub.callback(d as IReadResponse<Exclude<SubscribeOptions<T>, 'callback'>>)
         }
       }
     }

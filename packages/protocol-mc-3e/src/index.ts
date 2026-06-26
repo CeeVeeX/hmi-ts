@@ -5,6 +5,8 @@ import {
   type IResponse,
   type IRowResponse,
   type PacketFactory,
+  type SubscriptionGroup,
+  type SubscriptionRelation,
   RequestMethod,
   ResponseCode,
 } from '@hmi-ts/core'
@@ -334,6 +336,59 @@ function mergeReadOptions(options: Mc3eReadOptions[]): Mc3eReadOptions[] {
   return merged
 }
 
+function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+  if (options.length === 0) {
+    return []
+  }
+
+  const grouped = new Map<string, SubscriptionGroup[]>()
+  for (const option of options) {
+    const readOption = option as unknown as Mc3eReadOptions
+    const route = readOption.route ?? {}
+    const key = [
+      readOption.device.toUpperCase(),
+      route.networkNo ?? DEFAULT_NETWORK_NO,
+      route.plcNo ?? DEFAULT_PLC_NO,
+      route.ioNo ?? DEFAULT_IO_NO,
+      route.stationNo ?? readOption.unitId,
+    ].join(':')
+
+    const group = grouped.get(key)
+    if (group) {
+      group.push(option)
+    } else {
+      grouped.set(key, [option])
+    }
+  }
+
+  const relations: SubscriptionRelation[] = []
+
+  for (const [, group] of grouped) {
+    const sorted = [...group].sort((a, b) => a.start - b.start)
+    let currentRange = { ...sorted[0] } as unknown as Mc3eReadOptions
+    let currentSubscriptions = [sorted[0]]
+
+    for (let i = 1; i < sorted.length; i += 1) {
+      const next = sorted[i] as unknown as Mc3eReadOptions
+      const currentEnd = currentRange.start + currentRange.length
+      const nextEnd = next.start + next.length
+
+      if (currentEnd >= next.start) {
+        currentRange.length = Math.max(currentEnd, nextEnd) - currentRange.start
+        currentSubscriptions.push(sorted[i])
+      } else {
+        relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+        currentRange = { ...next } as unknown as Mc3eReadOptions
+        currentSubscriptions = [sorted[i]]
+      }
+    }
+
+    relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+  }
+
+  return relations
+}
+
 export class Mc3ePacketFactory implements PacketFactory {
   readonly isSerial = true
 
@@ -371,6 +426,10 @@ export class Mc3ePacketFactory implements PacketFactory {
 
   mergeRead(options: BaseReadOptions[]): BaseReadOptions[] {
     return mergeReadOptions(options as Mc3eReadOptions[])
+  }
+
+  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+    return mergeSubscriptionRelations(options)
   }
 
   sliceReadResponse(

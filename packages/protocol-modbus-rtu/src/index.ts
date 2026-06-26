@@ -4,6 +4,8 @@ import {
   type IResponse,
   RequestMethod,
   type IRowResponse,
+  type SubscriptionGroup,
+  type SubscriptionRelation,
 } from '@hmi-ts/core'
 import {
   createReadRtuFrame,
@@ -79,6 +81,46 @@ export class ModbusRtuPacketFactory implements PacketFactory {
     }
 
     return merged
+  }
+
+  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+    if (!options || options.length === 0) {
+      return []
+    }
+
+    const grouped = new Map<string, SubscriptionGroup[]>()
+    for (const opt of options) {
+      const unitId = opt.unitId ?? 1
+      const key = `${unitId}:${(opt as ReadOptions).fn}`
+      const list = grouped.get(key) ?? []
+      list.push(opt)
+      grouped.set(key, list)
+    }
+
+    const relations: SubscriptionRelation[] = []
+    for (const [, group] of grouped) {
+      const sorted = [...group].sort((a, b) => a.start - b.start)
+      let currentRange = { ...sorted[0] } as ReadOptions
+      let currentSubscriptions = [sorted[0]]
+
+      for (let i = 1; i < sorted.length; i += 1) {
+        const next = sorted[i]
+        const currentEnd = currentRange.start + currentRange.length
+        const nextEnd = next.start + next.length
+        if (currentEnd >= next.start) {
+          currentRange.length = Math.max(currentEnd, nextEnd) - currentRange.start
+          currentSubscriptions.push(next)
+        } else {
+          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+          currentRange = { ...next } as ReadOptions
+          currentSubscriptions = [next]
+        }
+      }
+
+      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+    }
+
+    return relations
   }
 
   sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {

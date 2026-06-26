@@ -5,6 +5,8 @@ import {
   type IResponse,
   type IRowResponse,
   type PacketFactory,
+  type SubscriptionGroup,
+  type SubscriptionRelation,
   RequestMethod,
   ResponseCode,
 } from '@hmi-ts/core'
@@ -15,6 +17,7 @@ import {
   isBitDevice,
   mapEndCode,
   mergeReadOptions,
+  mergeSubscriptionRelations,
   packBitValues,
   parseResponseFrame,
   readUInt16LE,
@@ -60,6 +63,10 @@ export class Mc4ePacketFactory implements PacketFactory {
 
   mergeRead(options: BaseReadOptions[]): BaseReadOptions[] {
     return mergeReadOptions(options as Mc4eReadOptions[])
+  }
+
+  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+    return mergeSubscriptionRelations(options)
   }
 
   sliceReadResponse(

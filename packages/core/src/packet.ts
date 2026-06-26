@@ -37,11 +37,11 @@ export interface PacketFactory<
   encodeWrite(transactionId: number, options: PartialBy<W, 'frame'>): Uint8Array
 
   /**
-   * 合并读取请求，减少报文数量
-   * @param options 读取请求参数数组
-   * @returns 合并后的读取请求参数数组
+   * 构建订阅关系。
+   *
+   * 工厂根据自身协议规则，把订阅记录分组、合并，并返回每个合并区间对应的订阅集合。
    */
-  mergeRead(options: R[]): R[]
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[]
 
   /**
    * 截取对应配置的响应数据
@@ -70,13 +70,14 @@ export type GetPFW<T extends PacketFactory<any, any>> =
 
 export type ReadOptions<T extends PacketFactory> = GetPFR<T>
 export type WriteOptions<T extends PacketFactory> = GetPFW<T>
+
 export type SubscribeOptions<T extends PacketFactory> = DistributiveOmit<
   ReadOptions<T>,
   'id' | 'interval' | 'callback'
 > & {
   id: string
   interval: number
-  callback: (data: IReadResponse<SubscriptionGroup<T>>) => void
+  callback: (data: IReadResponse<DistributiveOmit<SubscribeOptions<T>, 'callback'>>) => void
 }
 
 /**
@@ -92,4 +93,12 @@ export type SubscribeOptions<T extends PacketFactory> = DistributiveOmit<
  */
 export type SubscriptionGroup<T extends PacketFactory = PacketFactory> = SubscribeOptions<T> & {
   lastData?: Uint8Array
+}
+
+/**
+ * 订阅关系：一个合并后的读取区间，对应多个原始订阅。
+ */
+export interface SubscriptionRelation<T extends PacketFactory = PacketFactory> {
+  range: SubscribeOptions<T>
+  subscriptions: SubscriptionGroup<T>[]
 }

@@ -4,6 +4,8 @@ import {
   type IResponse,
   RequestMethod,
   type IRowResponse,
+  type SubscriptionGroup,
+  type SubscriptionRelation,
 } from '@hmi-ts/core'
 import {
   ModbusExceptionToResponseCode,
@@ -137,6 +139,50 @@ export class ModbusTcpPacketFactory<
     }
 
     return merged
+  }
+
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[] {
+    if (!options || options.length === 0) {
+      return []
+    }
+
+    const subscriptions = options as unknown as SubscriptionGroup<PacketFactory<R, W>>[]
+
+    const grouped = new Map<string, SubscriptionGroup<PacketFactory<R, W>>[]>()
+    for (const opt of subscriptions) {
+      const unitId = opt.unitId ?? 1
+      const key = `${unitId}:${(opt as R).fn}`
+      const existing = grouped.get(key) || []
+      existing.push(opt)
+      grouped.set(key, existing)
+    }
+
+    const relations: SubscriptionRelation<PacketFactory<R, W>>[] = []
+
+    for (const [, group] of grouped) {
+      const sorted = [...group].sort((a, b) => a.start - b.start)
+      let currentRange = { ...sorted[0] } as unknown as R
+      let currentSubscriptions = [sorted[0]]
+
+      for (let i = 1; i < sorted.length; i += 1) {
+        const next = sorted[i]
+        const currentEnd = currentRange.start + currentRange.length
+        const nextEnd = next.start + next.length
+
+        if (currentEnd >= next.start) {
+          currentRange.length = Math.max(currentEnd, nextEnd) - currentRange.start
+          currentSubscriptions.push(next)
+        } else {
+          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+          currentRange = { ...next } as unknown as R
+          currentSubscriptions = [next]
+        }
+      }
+
+      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+    }
+
+    return relations
   }
 
   /**
