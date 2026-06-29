@@ -122,16 +122,37 @@ export function decodeBoolean(bytes: Uint8Array): boolean {
 }
 
 /**
- * Uint8Array 转二进制字符串
+ * Uint8Array 转二进制字符串 LSB（低位优先）
  * @param bytes 输入字节数组
  * @param maxBits 最多显示的位数，默认显示所有
  */
-export function decodeBinaryString(bytes: Uint8Array, maxBits?: number): string {
-  const result = Array.from(bytes)
-    .map((b) => b.toString(2).padStart(8, '0'))
-    .join('')
+export function decodeLSBinary(bytes: Uint8Array, maxBits?: number): (0 | 1)[] {
+  const bits: (0 | 1)[] = []
 
-  return maxBits !== undefined ? result.substring(0, maxBits) : result
+  for (const byte of bytes) {
+    for (let i = 0; i < 8; i++) {
+      bits.push(((byte >> i) & 1) as 0 | 1)
+    }
+  }
+
+  return maxBits !== undefined ? bits.slice(0, maxBits) : bits
+}
+
+/**
+ * Uint8Array 转二进制字符串 MSB（高位优先）
+ * @param bytes 输入字节数组
+ * @param maxBits 最多显示的位数，默认显示所有
+ */
+export function decodeMSBinary(bytes: Uint8Array, maxBits?: number): (0 | 1)[] {
+  const bits: (0 | 1)[] = []
+
+  for (const byte of bytes) {
+    for (let i = 7; i >= 0; i--) {
+      bits.push(((byte >> i) & 1) as 0 | 1)
+    }
+  }
+
+  return maxBits !== undefined ? bits.slice(-maxBits) : bits
 }
 
 /**

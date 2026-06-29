@@ -173,13 +173,19 @@ export class ModbusTcpPacketFactory<
           currentRange.length = Math.max(currentEnd, nextEnd) - currentRange.start
           currentSubscriptions.push(next)
         } else {
-          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+          relations.push({
+            range: currentRange,
+            subscriptions: currentSubscriptions,
+          } as SubscriptionRelation<PacketFactory<R, W>>)
           currentRange = { ...next } as unknown as R
           currentSubscriptions = [next]
         }
       }
 
-      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+      relations.push({
+        range: currentRange,
+        subscriptions: currentSubscriptions,
+      } as SubscriptionRelation<PacketFactory<R, W>>)
     }
 
     return relations

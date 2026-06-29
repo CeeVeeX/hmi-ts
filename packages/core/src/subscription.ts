@@ -6,7 +6,7 @@ import type {
   SubscriptionRelation,
 } from './packet'
 import { ResponseCode, type IReadResponse } from './response'
-import type { PartialBy } from './type'
+import type { DistributiveOmit, PartialBy } from './type'
 import { sleep, uint8ArrayEquals } from './utils'
 
 /**
@@ -211,7 +211,9 @@ export class SubscriptionEngine<T extends PacketFactory> {
           // delete (d.options as any).interval
           // delete (d.options as any).id
 
-          sub.callback(d as IReadResponse<Exclude<SubscribeOptions<T>, 'callback'>>)
+          sub.callback(
+            d as unknown as IReadResponse<DistributiveOmit<SubscribeOptions<T>, 'callback'>>,
+          )
         }
       }
     }

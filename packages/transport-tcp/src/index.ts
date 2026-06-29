@@ -66,6 +66,11 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
   private reconnectTimer: NodeJS.Timeout | null = null
   private connecting = false
 
+  get address(): string {
+    const { host, port } = this.options
+    return `${host}:${port}`
+  }
+
   constructor(private readonly options: TcpTransportOptions) {
     super()
     this.reconnectDelay = options.reconnectDelayMs ?? 300

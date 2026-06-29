@@ -15,6 +15,8 @@ import {
   type ReadOptions,
   type WriteOptions,
   type SubscribeOptions,
+  type IDebugAgent,
+  generateUUID,
 } from '@hmi-ts/core'
 
 export interface ClientEvent {
@@ -26,8 +28,10 @@ export interface ClientEvent {
 }
 
 export interface ClientOptions<T> {
+  clientId?: string
   packetFactory: T
   transport: Transport
+  debugAgent?: IDebugAgent
   maxQueueSize?: number
   defaultUnitId?: number
   defaultTimeout?: number
@@ -54,6 +58,7 @@ interface InFlight<T extends PacketFactory> {
 }
 
 export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
+  readonly clientId: string
   private scheduler: RequestScheduler
   private sequence = 0
   private subscriptionEngine: SubscriptionEngine<T>
@@ -61,7 +66,28 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   constructor(private readonly options: ClientOptions<T>) {
     super()
 
+    this.clientId = options.clientId || generateUUID()
+
     this.scheduler = new RequestScheduler(this.options.maxQueueSize ?? 1000)
+
+    if (this.options.debugAgent) {
+      this.options.debugAgent.on('command', (command, payload) => {
+        console.log(`DebugAgent command received: ${command}`, payload)
+        switch (command) {
+          case 'client_info':
+            this.options.debugAgent?.report(payload.uuid, {
+              address: this.options.transport.address,
+              defaultUnitId: this.options.defaultUnitId,
+              defaultTimeout: this.options.defaultTimeout,
+              defaultInterval: this.options.defaultInterval,
+              maxQueueSize: this.options.maxQueueSize,
+            })
+            break
+          default:
+            console.warn(`Unknown command received from DebugAgent: ${command}`)
+        }
+      })
+    }
 
     // 所有响应都通过 transport 的 message 事件接收，按 transactionId 匹配到对应的请求。
     options.transport.on('message', (data) => {
@@ -123,6 +149,9 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   async connect(): Promise<void> {
     await this.options.transport.connect()
     this.subscriptionEngine.start()
+    if (this.options.debugAgent) {
+      await this.options.debugAgent.connect(this.clientId)
+    }
   }
 
   /**
@@ -150,57 +179,98 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
   ): Promise<IWriteResponse<WriteOptions<T>>> {
     const tx = this.nextTx()
 
-    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
-    options.priority = options?.priority ?? PRIORITY.write
-    options.startAt = Date.now()
+    try {
+      options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+      options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+      options.priority = options?.priority ?? PRIORITY.write
+      options.startAt = Date.now()
 
-    const opts = options as WriteOptions<T>
+      const opts = options as WriteOptions<T>
 
-    if (!opts.frame) {
-      // 构建帧
-      opts.frame = this.options.packetFactory.encodeWrite(tx, opts)
+      if (!opts.frame) {
+        // 构建帧
+        opts.frame = this.options.packetFactory.encodeWrite(tx, opts)
+      }
+
+      // this.options.debugAgent?.push(IDebugMessageType.Request, {
+      //   method: 'write',
+      //   options,
+      // })
+
+      // 安排请求并等待响应
+      const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
+        id: tx,
+        options: opts,
+        execute: (task) => this.performRequest(task),
+        resolve: () => {},
+        reject: () => {},
+      })
+
+      // this.options.debugAgent?.push(IDebugMessageType.Response, {
+      //   method: 'write',
+      //   options,
+      //   response,
+      // })
+
+      return response
+    } catch (error) {
+      // this.options.debugAgent?.push('request_error', {
+      //   uuid: tx.toString(),
+      //   method: 'write',
+      //   options,
+      //   error: (error as Error).message,
+      // })
+      return Promise.reject(error)
     }
-
-    // 安排请求并等待响应
-    const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
-      id: tx,
-      options: opts,
-      execute: (task) => this.performRequest(task),
-      resolve: () => {},
-      reject: () => {},
-    })
-
-    return response
   }
 
   async read(
     options: PartialBy<ReadOptions<T>, 'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame'>,
   ): Promise<IReadResponse<ReadOptions<T>>> {
-    const tx = this.nextTx()
+    try {
+      const tx = this.nextTx()
 
-    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
-    options.priority = options?.priority ?? PRIORITY.write
-    options.startAt = Date.now()
+      options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+      options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+      options.priority = options?.priority ?? PRIORITY.write
+      options.startAt = Date.now()
 
-    const opts = options as ReadOptions<T>
+      const opts = options as ReadOptions<T>
 
-    if (!opts.frame) {
-      // 构建帧
-      opts.frame = this.options.packetFactory.encodeRead(tx, opts)
+      if (!opts.frame) {
+        // 构建帧
+        opts.frame = this.options.packetFactory.encodeRead(tx, opts)
+      }
+
+      // this.options.debugAgent?.push(IDebugMessageType.Request, {
+      //   method: 'read',
+      //   options,
+      // })
+
+      // 安排请求并等待响应
+      const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
+        id: tx,
+        options: opts,
+        execute: (task) => this.performRequest(task),
+        resolve: () => {},
+        reject: () => {},
+      })
+
+      // this.options.debugAgent?.push(IDebugMessageType.Response, {
+      //   method: 'read',
+      //   options,
+      //   response,
+      // })
+
+      return response
+    } catch (error) {
+      // this.options.debugAgent?.push(IDebugMessageType.Request, {
+      //   method: 'read',
+      //   options,
+      //   error: (error as Error).message,
+      // })
+      return Promise.reject(error)
     }
-
-    // 安排请求并等待响应
-    const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
-      id: tx,
-      options: opts,
-      execute: (task) => this.performRequest(task),
-      resolve: () => {},
-      reject: () => {},
-    })
-
-    return response
   }
 
   subscribe(

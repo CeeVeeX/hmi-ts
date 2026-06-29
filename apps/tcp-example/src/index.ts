@@ -2,8 +2,9 @@ import 'dotenv/config'
 import { Client } from '@hmi-ts/client'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { ModbusTcpPacketFactory, ReadFn } from '@hmi-ts/protocol-modbus-tcp'
-import { decodeBinaryString, decodeInt32 } from '@hmi-ts/codec'
+import { decodeLSBinary, decodeMSBinary, uint8ToHex } from '@hmi-ts/codec'
 import { ResponseCode } from '@hmi-ts/core'
+import { DebugAgent } from '@hmi-ts/debug-agent'
 
 // client.connect() 错误后，延迟一秒再次尝试连接
 function retryConnect(client: Client<ModbusTcpPacketFactory>, delayMs = 1000): void {
@@ -28,9 +29,15 @@ async function main(): Promise<void> {
     port: Number.isNaN(port) ? 502 : port,
   })
 
+  const debugAgent = new DebugAgent({
+    deviceAddress: host + ':' + port,
+  })
+
   const client = new Client({
+    clientId: 'modbus-tcp-client',
     packetFactory: new ModbusTcpPacketFactory(),
     transport,
+    debugAgent,
     maxQueueSize: 10,
     defaultUnitId: 1,
     defaultTimeout: 1000,
@@ -135,15 +142,22 @@ async function main(): Promise<void> {
         return
       }
 
-      console.log(data.options)
+      console.log(
+        '请求：',
+        uint8ToHex(data.options.frame),
+        '响应:',
+        uint8ToHex(data.responseFrame),
+        '数据:',
+        data.data,
+      )
 
       console.log(
         '1请求耗时:',
         data.endAt - data.startAt,
         'ms',
         '数据:',
-        decodeBinaryString(data.data, data.options.length),
-        data.options.length,
+        decodeLSBinary(data.data, data.options.length),
+        decodeMSBinary(data.data, data.options.length),
       )
     },
   })

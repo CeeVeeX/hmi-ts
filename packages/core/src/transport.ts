@@ -72,6 +72,7 @@ export interface TransportEvent {
  * ```
  */
 export interface Transport extends EventEmitter<TransportEvent> {
+  address: string
   /**
    * 建立连接。
    *
