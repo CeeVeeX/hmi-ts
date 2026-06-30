@@ -23,7 +23,13 @@ import {
   readUInt16LE,
   unpackBitValues,
 } from './helpers'
-import type { Mc4ePacketFactoryOptions, Mc4eReadOptions, Mc4eWriteOptions } from './types'
+import type {
+  Mc4ePacketFactoryOptions,
+  Mc4eReadOptions,
+  Mc4eWriteOptions,
+  ReadBitOptions,
+  ReadWordOptions,
+} from './types'
 
 export class Mc4ePacketFactory implements PacketFactory {
   constructor(private readonly options: Mc4ePacketFactoryOptions = {}) {}
@@ -41,20 +47,20 @@ export class Mc4ePacketFactory implements PacketFactory {
     return sequence & 0xffff
   }
 
-  encodeRead(transactionId: number, options: BaseReadOptions): Uint8Array {
+  encodeRead(options: BaseReadOptions): Uint8Array {
     const readOptions = options as Mc4eReadOptions
     const body = buildReadBody(readOptions)
-    return buildRequestFrame(transactionId, body, {
+    return buildRequestFrame(options.id, body, {
       unitId: readOptions.unitId,
       route: readOptions.route ?? this.options.route,
       monitoringTimer: readOptions.monitoringTimer ?? this.options.monitoringTimer,
     })
   }
 
-  encodeWrite(transactionId: number, options: BaseWriteOptions): Uint8Array {
+  encodeWrite(options: BaseWriteOptions): Uint8Array {
     const writeOptions = options as Mc4eWriteOptions
     const body = buildWriteBody(writeOptions)
-    return buildRequestFrame(transactionId, body, {
+    return buildRequestFrame(options.id, body, {
       unitId: writeOptions.unitId,
       route: writeOptions.route ?? this.options.route,
       monitoringTimer: writeOptions.monitoringTimer ?? this.options.monitoringTimer,
@@ -71,10 +77,11 @@ export class Mc4ePacketFactory implements PacketFactory {
 
   sliceReadResponse(
     options: BaseReadOptions,
-    response: IResponse<BaseReadOptions>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    response: IResponse<Mc4eReadOptions, any>,
   ): Uint8Array | null {
     const req = options as Mc4eReadOptions
-    const rsp = response as IResponse<Mc4eReadOptions>
+    const rsp = response
 
     if (rsp.method !== RequestMethod.READ) {
       throw new Error(`response method mismatch: ${rsp.method}`)
@@ -108,10 +115,10 @@ export class Mc4ePacketFactory implements PacketFactory {
   }
 
   decodeResponse(
-    opt: CommonOptions,
+    opt: Mc4eReadOptions | Mc4eWriteOptions,
     data: Uint8Array,
-  ): IRowResponse<Mc4eReadOptions | Mc4eWriteOptions> {
-    const requestOptions = opt as Mc4eReadOptions | Mc4eWriteOptions
+  ): IRowResponse<Mc4eReadOptions, Mc4eWriteOptions> {
+    const requestOptions = opt
 
     try {
       const parsed = parseResponseFrame(data)
@@ -123,7 +130,7 @@ export class Mc4ePacketFactory implements PacketFactory {
             options: requestOptions,
             transactionId: parsed.transactionId,
             method: RequestMethod.READ,
-            row: data,
+            responseFrame: data,
             code,
           }
         }
@@ -132,7 +139,7 @@ export class Mc4ePacketFactory implements PacketFactory {
           options: requestOptions,
           transactionId: parsed.transactionId,
           method: RequestMethod.READ,
-          row: data,
+          responseFrame: data,
           code,
           data: parsed.payload,
           byteCount: parsed.payload.length,
@@ -144,7 +151,7 @@ export class Mc4ePacketFactory implements PacketFactory {
           options: requestOptions,
           transactionId: parsed.transactionId,
           method: RequestMethod.WRITE,
-          row: data,
+          responseFrame: data,
           code,
         }
       }
@@ -153,7 +160,7 @@ export class Mc4ePacketFactory implements PacketFactory {
         options: requestOptions,
         transactionId: parsed.transactionId,
         method: RequestMethod.WRITE,
-        row: data,
+        responseFrame: data,
         code,
       }
     } catch {
@@ -162,7 +169,7 @@ export class Mc4ePacketFactory implements PacketFactory {
           options: requestOptions,
           transactionId: this.getTransactionId(data),
           method: RequestMethod.READ,
-          row: data,
+          responseFrame: data,
           code: ResponseCode.RESPONSE_INVALID,
         }
       }
@@ -171,7 +178,7 @@ export class Mc4ePacketFactory implements PacketFactory {
         options: requestOptions,
         transactionId: this.getTransactionId(data),
         method: RequestMethod.WRITE,
-        row: data,
+        responseFrame: data,
         code: ResponseCode.RESPONSE_INVALID,
       }
     }

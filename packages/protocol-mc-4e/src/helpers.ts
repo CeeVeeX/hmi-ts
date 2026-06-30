@@ -287,9 +287,7 @@ export function mergeReadOptions(options: Mc4eReadOptions[]): Mc4eReadOptions[] 
   return merged
 }
 
-export function mergeSubscriptionRelations(
-  options: SubscriptionGroup[],
-): SubscriptionRelation[] {
+export function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
   if (options.length === 0) {
     return []
   }

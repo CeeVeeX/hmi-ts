@@ -25,10 +25,10 @@ import type {
   PartialReadOptions,
   PartialSubscribeOptions,
   PartialWriteOptions,
-  IResponse,
 } from '@hmi-ts/core'
 
-export class Client<T extends PacketFactory>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export class Client<T extends PacketFactory<any, any>>
   extends EventEmitter<ClientEvent<T>>
   implements IClient<T>
 {
@@ -81,11 +81,7 @@ export class Client<T extends PacketFactory>
           const response = options.packetFactory.decodeResponse(this.#inFlight.tk.options, data)
 
           // inFlight 用来确保按顺序匹配
-          this.#inFlight.resolve({
-            ...response,
-            startAt: this.#inFlight.tk.options.startAt,
-            endAt: Date.now(),
-          } as IResponse<ReadOptions<T>, WriteOptions<T>>)
+          this.#inFlight.resolve(response)
 
           this.#inFlight = null
         }
@@ -168,7 +164,7 @@ export class Client<T extends PacketFactory>
 
       // 安排请求并等待响应
       const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
-        id: options.id,
+        id: opts.id,
         options: opts,
         execute: (task) => this.performRequest(task),
         resolve: () => {},
@@ -204,7 +200,7 @@ export class Client<T extends PacketFactory>
 
       // 安排请求并等待响应
       const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
-        id: options.id,
+        id: opts.id,
         options: opts,
         execute: (task) => this.performRequest(task),
         resolve: () => {},

@@ -3,7 +3,6 @@ import {
   ResponseCode,
   type IResponse,
   RequestMethod,
-  type IRowResponse,
   type SubscriptionGroup,
   type SubscriptionRelation,
 } from '@hmi-ts/core'
@@ -20,7 +19,6 @@ import {
   encodeWriteMultiRegs,
   encodeWriteSingleCoil,
   encodeWriteSingleReg,
-  getMethodByFnCode,
   parseModbusTcpResponse,
 } from './encode'
 
@@ -34,6 +32,28 @@ export {
   encodeWriteSingleReg,
   type ReadOptions,
   type WriteOptions,
+}
+
+function isReadOptions<R extends ReadOptions, W extends WriteOptions>(
+  options: R | W,
+): options is R {
+  return (
+    options.fn === ReadFn.ReadCoils ||
+    options.fn === ReadFn.ReadDiscreteInputs ||
+    options.fn === ReadFn.ReadHoldingRegisters ||
+    options.fn === ReadFn.ReadInputRegisters
+  )
+}
+
+function isWriteOptions<R extends ReadOptions, W extends WriteOptions>(
+  options: R | W,
+): options is W {
+  return (
+    options.fn === WriteFn.WriteSingleCoil ||
+    options.fn === WriteFn.WriteSingleRegister ||
+    options.fn === WriteFn.WriteMultipleCoils ||
+    options.fn === WriteFn.WriteMultipleRegisters
+  )
 }
 
 // -------------------------- 工厂类 --------------------------
@@ -258,53 +278,87 @@ export class ModbusTcpPacketFactory<
     return data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(options: R | W, d: Uint8Array): IRowResponse<R, W> {
+  decodeResponse(options: R | W, d: Uint8Array): IResponse<R, W> {
     const { fn } = options
     const { transactionId, functionCode, data, byteCount, exceptionCode } =
       parseModbusTcpResponse(d)
 
-    const method = getMethodByFnCode(fn)
+    if (isReadOptions(options)) {
+      if (exceptionCode !== null) {
+        return {
+          options,
+          startAt: options.startAt,
+          endAt: Date.now(),
+          transactionId,
+          method: RequestMethod.READ,
+          responseFrame: d,
+          code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
+        }
+      }
 
-    if (exceptionCode !== null) {
-      // 异常响应
+      // 防御性校验：响应功能码必须与请求功能码一致，避免错误切片。
+      if (functionCode !== fn) {
+        return {
+          options,
+          transactionId,
+          method: RequestMethod.READ,
+          responseFrame: d,
+          startAt: options.startAt,
+          endAt: Date.now(),
+          code: ResponseCode.RESPONSE_INVALID,
+        }
+      }
+
       return {
         options,
         transactionId,
-        method,
-        responseFrame: d,
-        code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
-      } as IRowResponse<R, W>
-    }
-
-    // 防御性校验：响应功能码必须与请求功能码一致，避免错误切片。
-    if (functionCode !== fn) {
-      return {
-        options,
-        transactionId,
-        method,
-        responseFrame: d,
-        code: ResponseCode.RESPONSE_INVALID,
-      } as IRowResponse<R, W>
-    }
-
-    if (method === RequestMethod.READ) {
-      return {
-        options,
-        transactionId,
-        method,
+        method: RequestMethod.READ,
         responseFrame: d,
         code: ResponseCode.SUCCESS,
-        data, // 仅返回数据部分，去掉 MBAP 头和 PDU 功能码
+        startAt: options.startAt,
+        endAt: Date.now(),
+        data: data, // 仅返回数据部分，去掉 MBAP 头和 PDU 功能码
         byteCount,
-      } as IRowResponse<R, W>
-    } else {
+      }
+    }
+
+    if (isWriteOptions(options)) {
+      if (exceptionCode !== null) {
+        return {
+          options,
+          startAt: options.startAt,
+          endAt: Date.now(),
+          transactionId,
+          method: RequestMethod.WRITE,
+          responseFrame: d,
+          code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
+        }
+      }
+
+      // 防御性校验：响应功能码必须与请求功能码一致，避免错误切片。
+      if (functionCode !== fn) {
+        return {
+          options,
+          transactionId,
+          method: RequestMethod.WRITE,
+          responseFrame: d,
+          startAt: options.startAt,
+          endAt: Date.now(),
+          code: ResponseCode.RESPONSE_INVALID,
+        }
+      }
+
       return {
         options,
         transactionId,
-        method,
+        method: RequestMethod.WRITE,
+        startAt: options.startAt,
+        endAt: Date.now(),
         responseFrame: d,
         code: ResponseCode.SUCCESS,
-      } as IRowResponse<R, W>
+      }
     }
+
+    throw new Error(`未知功能码: ${fn}`)
   }
 }

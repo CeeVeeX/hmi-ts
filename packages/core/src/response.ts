@@ -1,5 +1,4 @@
 import type { BaseReadOptions, BaseWriteOptions, CommonOptions } from './options'
-import type { PartialBy } from './type'
 
 export enum ResponseCode {
   // ========== 正常完成 ==========
@@ -75,8 +74,3 @@ export type IWriteResponse<T extends BaseWriteOptions> =
 export type IResponse<R extends BaseReadOptions, W extends BaseWriteOptions> =
   | IReadResponse<R>
   | IWriteResponse<W>
-
-export type IRowResponse<R extends BaseReadOptions, W extends BaseWriteOptions> = PartialBy<
-  IResponse<R, W>,
-  'startAt' | 'endAt'
->

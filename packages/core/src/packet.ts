@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { BaseReadOptions, BaseWriteOptions } from './options'
-import type { IReadResponse, IResponse, IRowResponse } from './response'
+import type { IReadResponse, IResponse } from './response'
 import type { DistributiveOmit, PartialBy } from './type'
 
 export interface PacketFactory<
@@ -57,7 +57,7 @@ export interface PacketFactory<
    * @param data 响应数据
    * @returns 解码后的响应对象
    */
-  decodeResponse(opt: R | W, data: Uint8Array): IRowResponse<R, W>
+  decodeResponse(opt: R | W, data: Uint8Array): IResponse<R, W>
 }
 
 // // 提取 PacketFactory 的第一个泛型参数 R
