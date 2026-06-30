@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     port: Number.isNaN(port) ? 502 : port,
   })
 
-  const debugAgent = new DebugAgent({
+  const debugAgent = new DebugAgent<ModbusTcpPacketFactory>({
     deviceAddress: host + ':' + port,
   })
 

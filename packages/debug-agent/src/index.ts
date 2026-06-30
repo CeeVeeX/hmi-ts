@@ -1,4 +1,11 @@
-import { EventEmitter, type ICommandPayload, type IDebugAgent, generateUUID } from '@hmi-ts/core'
+import {
+  EventEmitter,
+  type IClient,
+  type ICommandPayload,
+  type IDebugAgent,
+  type PacketFactory,
+  generateUUID,
+} from '@hmi-ts/core'
 import mqtt from 'mqtt'
 
 export interface DebugAgentOptions {
@@ -8,30 +15,30 @@ export interface DebugAgentOptions {
   password?: string
 }
 
-export class DebugAgent extends EventEmitter implements IDebugAgent {
+export class DebugAgent<T extends PacketFactory> extends EventEmitter implements IDebugAgent<T> {
   connection?: mqtt.MqttClient
 
-  clientId?: string
+  client?: IClient<T>
 
   constructor(private readonly options: DebugAgentOptions) {
     super()
   }
 
-  async connect(clientId: string): Promise<void> {
-    this.clientId = clientId
+  async connect(client: IClient<T>): Promise<void> {
+    this.client = client
     const { brokerUrl, username, password } = this.options
 
     this.connection = mqtt.connect(brokerUrl || 'ws://127.0.0.1:58080', {
       username,
       password,
-      clientId: clientId || generateUUID(),
+      clientId: this.client.clientId || generateUUID(),
     })
 
-    const command = `command/${clientId}/#`
+    const command = `command/${this.client.clientId}/#`
     const commandAll = `command/all/#`
 
     this.connection.on('connect', () => {
-      this.push('debug_agent_connected', { uuid: generateUUID(), clientId: this.clientId })
+      this.push('debug_agent_connected', { uuid: generateUUID(), clientId: this.client!.clientId })
       console.log('Connected to MQTT broker')
       this.emit('connected')
       this.connection?.subscribe(command)
@@ -50,17 +57,28 @@ export class DebugAgent extends EventEmitter implements IDebugAgent {
 
     this.connection.on('error', (error) => {
       this.emit('error', error)
-      console.error('MQTT connection error:', error)
     })
 
     this.connection.on('message', (topic, message) => {
       try {
         console.log(`Received MQTT message on topic ${topic}:`, message.toString())
         const [fn, scope, command] = topic.split('/')
-        if (fn === 'command' && (scope === this.clientId || scope === 'all')) {
+        if (fn === 'command' && (scope === this.client!.clientId || scope === 'all')) {
           const payload = JSON.parse(message.toString()) as ICommandPayload
 
-          this.emit('command', command, payload)
+          switch (command) {
+            case 'client_info':
+              this.report(payload.uuid, {
+                address: client.options.transport.address,
+                defaultUnitId: client.options.defaultUnitId,
+                defaultTimeout: client.options.defaultTimeout,
+                defaultInterval: client.options.defaultInterval,
+                maxQueueSize: client.options.maxQueueSize,
+              })
+              break
+            default:
+              console.warn(`Unknown command received from DebugAgent: ${command}`)
+          }
         }
       } catch (error) {
         console.error('Failed to parse MQTT message:', error)
@@ -72,12 +90,12 @@ export class DebugAgent extends EventEmitter implements IDebugAgent {
    * 主动推送调试信息到调试器
    */
   push(command: string, payload: ICommandPayload) {
-    if (!this.clientId) {
-      console.error('DebugAgent clientId is not set. Call connect() first.')
+    if (!this.client) {
+      console.error('DebugAgent client is not set. Call connect() first.')
       return
     }
 
-    const topic = `report/${this.clientId}/${command}`
+    const topic = `report/${this.client.clientId}/${command}`
 
     if (!this.connection || !this.connection.connected) {
       return
@@ -90,12 +108,12 @@ export class DebugAgent extends EventEmitter implements IDebugAgent {
    * 返回指令执行结果给调试器
    */
   report(uuid: string, payload: object) {
-    if (!this.clientId) {
-      console.error('DebugAgent clientId is not set. Call connect() first.')
+    if (!this.client) {
+      console.error('DebugAgent client is not set. Call connect() first.')
       return
     }
 
-    const topic = `report/${this.clientId}/${uuid}`
+    const topic = `report/${this.client.clientId}/${uuid}`
 
     if (!this.connection || !this.connection.connected) {
       return

@@ -1,139 +1,114 @@
 import {
   EventEmitter,
   ConnectionClosedError,
-  type IReadResponse,
-  type IWriteResponse,
-  type PacketFactory,
-  type RequestTask,
-  type Transport,
   PRIORITY,
   RequestScheduler,
   SubscriptionEngine,
-  type PartialBy,
-  type IResponse,
   QueueOverflowError,
-  type ReadOptions,
-  type WriteOptions,
-  type SubscribeOptions,
-  type IDebugAgent,
   generateUUID,
 } from '@hmi-ts/core'
 
-export interface ClientEvent {
-  connected: () => void
-  disconnected: (error: Error) => void
-  destroyed: (error: Error) => void
-  timeout: (error: Error) => void
-  error: (error: Error) => void
-}
+import type {
+  IWriteResponse,
+  PacketFactory,
+  RequestTask,
+  ReadOptions,
+  WriteOptions,
+  SubscribeOptions,
+  IClient,
+  InFlight,
+  ClientOptions,
+  RequestResponse,
+  RequestOptions,
+  IReadResponse,
+  ClientEvent,
+  PartialReadOptions,
+  PartialSubscribeOptions,
+  PartialWriteOptions,
+  IResponse,
+} from '@hmi-ts/core'
 
-export interface ClientOptions<T> {
-  clientId?: string
-  packetFactory: T
-  transport: Transport
-  debugAgent?: IDebugAgent
-  maxQueueSize?: number
-  defaultUnitId?: number
-  defaultTimeout?: number
-  defaultInterval?: number
-}
+export class Client<T extends PacketFactory>
+  extends EventEmitter<ClientEvent<T>>
+  implements IClient<T>
+{
+  #clientId: string
+  #scheduler: RequestScheduler
+  #sequence = 0
+  #subscriptionEngine: SubscriptionEngine<T>
+  #inFlight: InFlight<T> | null = null
 
-export type RequestOptions<T extends PacketFactory> = ReadOptions<T> | WriteOptions<T>
+  get clientId(): string {
+    return this.#clientId
+  }
 
-type RequestResponse<T extends PacketFactory> =
-  | IReadResponse<ReadOptions<T>>
-  | IWriteResponse<WriteOptions<T>>
+  get scheduler(): RequestScheduler {
+    return this.#scheduler
+  }
 
-type InFlightResponse<T extends PacketFactory> = IResponse<RequestOptions<T>>
+  get subscriptionEngine(): SubscriptionEngine<T> {
+    return this.#subscriptionEngine
+  }
 
-interface InFlightTask<T extends PacketFactory> {
-  id: number
-  options: RequestOptions<T>
-}
+  get inFlight(): InFlight<T> | null {
+    return this.#inFlight
+  }
 
-interface InFlight<T extends PacketFactory> {
-  tk: InFlightTask<T>
-  resolve: (response: InFlightResponse<T> | PromiseLike<InFlightResponse<T>>) => void
-  reject: (error: Error) => void
-}
+  get sequence(): number {
+    return this.#sequence
+  }
 
-export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
-  readonly clientId: string
-  private scheduler: RequestScheduler
-  private sequence = 0
-  private subscriptionEngine: SubscriptionEngine<T>
-  private inFlight: InFlight<T> | null = null
-  constructor(private readonly options: ClientOptions<T>) {
+  constructor(readonly options: ClientOptions<T>) {
     super()
 
-    this.clientId = options.clientId || generateUUID()
+    this.#clientId = options.clientId || generateUUID()
 
-    this.scheduler = new RequestScheduler(this.options.maxQueueSize ?? 1000)
-
-    if (this.options.debugAgent) {
-      this.options.debugAgent.on('command', (command, payload) => {
-        console.log(`DebugAgent command received: ${command}`, payload)
-        switch (command) {
-          case 'client_info':
-            this.options.debugAgent?.report(payload.uuid, {
-              address: this.options.transport.address,
-              defaultUnitId: this.options.defaultUnitId,
-              defaultTimeout: this.options.defaultTimeout,
-              defaultInterval: this.options.defaultInterval,
-              maxQueueSize: this.options.maxQueueSize,
-            })
-            break
-          default:
-            console.warn(`Unknown command received from DebugAgent: ${command}`)
-        }
-      })
-    }
+    this.#scheduler = new RequestScheduler(this.options.maxQueueSize ?? 1000)
 
     // 所有响应都通过 transport 的 message 事件接收，按 transactionId 匹配到对应的请求。
     options.transport.on('message', (data) => {
       try {
-        if (!this.inFlight) {
+        if (!this.#inFlight) {
           throw new Error('no inFlight request, but received a response')
         }
 
         // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
         if (
           options.packetFactory.isSerial ||
-          this.inFlight.tk.id === options.packetFactory.getTransactionId(data)
+          this.#inFlight.tk.id === options.packetFactory.getTransactionId(data)
         ) {
           // 解析响应
-          const response = options.packetFactory.decodeResponse(this.inFlight.tk.options, data)
+          const response = options.packetFactory.decodeResponse(this.#inFlight.tk.options, data)
 
           // inFlight 用来确保按顺序匹配
-          this.inFlight.resolve({
+          this.#inFlight.resolve({
             ...response,
-            startAt: this.inFlight.tk.options.startAt,
+            startAt: this.#inFlight.tk.options.startAt,
             endAt: Date.now(),
-          } as InFlightResponse<T>)
-          this.inFlight = null
+          } as IResponse<ReadOptions<T>, WriteOptions<T>>)
+
+          this.#inFlight = null
         }
       } catch (error) {
         this.emit('error', error as Error)
       }
     })
 
-    options.transport.on('connected', () => {
-      this.emit('connected')
-    })
+    options.transport.on('connected', () => this.emit('connected'))
 
     options.transport.on('disconnected', (error) => {
       this.scheduler.clearPending(new ConnectionClosedError())
-      if (this.inFlight) {
-        this.inFlight.reject(new ConnectionClosedError())
-        this.inFlight = null
+      if (this.#inFlight) {
+        this.#inFlight.reject(new ConnectionClosedError())
+        this.#inFlight = null
       }
       this.emit('disconnected', error)
     })
 
-    this.subscriptionEngine = new SubscriptionEngine({
+    this.#subscriptionEngine = new SubscriptionEngine<T>({
       packetFactory: options.packetFactory,
       // 提供给订阅轮询用
-      read: (options) => this.read(options),
+      read: (options) => this.read(options) as Promise<IReadResponse<SubscribeOptions<T>>>,
       onError: (error) => this.emit('error', error),
     })
   }
@@ -148,9 +123,9 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
    */
   async connect(): Promise<void> {
     await this.options.transport.connect()
-    this.subscriptionEngine.start()
+    this.#subscriptionEngine.start()
     if (this.options.debugAgent) {
-      await this.options.debugAgent.connect(this.clientId)
+      await this.options.debugAgent.connect(this)
     }
   }
 
@@ -163,122 +138,89 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
    * ```
    */
   async close(): Promise<void> {
-    this.subscriptionEngine.stop()
+    this.#subscriptionEngine.stop()
     this.scheduler.close(new ConnectionClosedError())
     await this.options.transport.close()
   }
 
   async destroy(): Promise<void> {
-    this.subscriptionEngine.stop()
+    this.#subscriptionEngine.stop()
     this.scheduler.close(new ConnectionClosedError())
     await this.options.transport.destroy()
   }
 
-  async write(
-    options: PartialBy<WriteOptions<T>, 'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame'>,
-  ): Promise<IWriteResponse<WriteOptions<T>>> {
-    const tx = this.nextTx()
+  async write(options: PartialWriteOptions<T>): Promise<IWriteResponse<WriteOptions<T>>> {
+    options.id = options.id ?? this.nextTx()
+    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options.priority = options?.priority ?? PRIORITY.write
+    options.startAt = Date.now()
+
+    const opts = options as WriteOptions<T>
 
     try {
-      options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-      options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
-      options.priority = options?.priority ?? PRIORITY.write
-      options.startAt = Date.now()
-
-      const opts = options as WriteOptions<T>
-
       if (!opts.frame) {
         // 构建帧
-        opts.frame = this.options.packetFactory.encodeWrite(tx, opts)
+        opts.frame = this.options.packetFactory.encodeWrite(opts)
       }
 
-      // this.options.debugAgent?.push(IDebugMessageType.Request, {
-      //   method: 'write',
-      //   options,
-      // })
+      this.emit('write-before', opts)
 
       // 安排请求并等待响应
       const response = await this.scheduleRequest<IWriteResponse<WriteOptions<T>>>({
-        id: tx,
+        id: options.id,
         options: opts,
         execute: (task) => this.performRequest(task),
         resolve: () => {},
         reject: () => {},
       })
 
-      // this.options.debugAgent?.push(IDebugMessageType.Response, {
-      //   method: 'write',
-      //   options,
-      //   response,
-      // })
+      this.emit('written', opts)
 
       return response
     } catch (error) {
-      // this.options.debugAgent?.push('request_error', {
-      //   uuid: tx.toString(),
-      //   method: 'write',
-      //   options,
-      //   error: (error as Error).message,
-      // })
+      this.emit('write-error', options as WriteOptions<T>, error as Error)
+
       return Promise.reject(error)
     }
   }
 
-  async read(
-    options: PartialBy<ReadOptions<T>, 'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame'>,
-  ): Promise<IReadResponse<ReadOptions<T>>> {
+  async read(options: PartialReadOptions<T>): Promise<IReadResponse<ReadOptions<T>>> {
+    options.id = options.id ?? this.nextTx()
+    options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
+    options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
+    options.priority = options?.priority ?? PRIORITY.write
+    options.startAt = Date.now()
+
+    const opts = options as ReadOptions<T>
+
     try {
-      const tx = this.nextTx()
-
-      options.unitId = options?.unitId ?? this.options.defaultUnitId ?? 1
-      options.timeout = options?.timeout ?? this.options.defaultTimeout ?? 1000
-      options.priority = options?.priority ?? PRIORITY.write
-      options.startAt = Date.now()
-
-      const opts = options as ReadOptions<T>
-
       if (!opts.frame) {
         // 构建帧
-        opts.frame = this.options.packetFactory.encodeRead(tx, opts)
+        opts.frame = this.options.packetFactory.encodeRead(opts)
       }
 
-      // this.options.debugAgent?.push(IDebugMessageType.Request, {
-      //   method: 'read',
-      //   options,
-      // })
+      this.emit('read-before', opts)
 
       // 安排请求并等待响应
       const response = await this.scheduleRequest<IReadResponse<ReadOptions<T>>>({
-        id: tx,
+        id: options.id,
         options: opts,
         execute: (task) => this.performRequest(task),
         resolve: () => {},
         reject: () => {},
       })
 
-      // this.options.debugAgent?.push(IDebugMessageType.Response, {
-      //   method: 'read',
-      //   options,
-      //   response,
-      // })
+      this.emit('read', opts, response)
 
       return response
     } catch (error) {
-      // this.options.debugAgent?.push(IDebugMessageType.Request, {
-      //   method: 'read',
-      //   options,
-      //   error: (error as Error).message,
-      // })
+      this.emit('read-error', options as ReadOptions<T>, error as Error)
       return Promise.reject(error)
     }
   }
 
-  subscribe(
-    options: PartialBy<
-      SubscribeOptions<T>,
-      'unitId' | 'timeout' | 'priority' | 'startAt' | 'frame' | 'id' | 'interval'
-    >,
-  ) {
+  subscribe(options: PartialSubscribeOptions<T>) {
     const opts = {
       ...options,
       unitId: options.unitId ?? this.options.defaultUnitId ?? 1,
@@ -286,11 +228,11 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       priority: options.priority ?? PRIORITY.write,
       startAt: options.startAt ?? Date.now(),
       interval: options.interval ?? this.options.defaultInterval ?? 0,
-    } as PartialBy<SubscribeOptions<T>, 'id'>
+    } as SubscribeOptions<T>
 
     // 报文合并必须满足, unitId 一致, interval 一致
     // subscriptionEngine 里实现了报文合并功能
-    return this.subscriptionEngine.subscribe(opts)
+    return this.#subscriptionEngine.subscribe(opts)
   }
 
   private async scheduleRequest<R extends RequestResponse<T>>(task: RequestTask<R>): Promise<R> {
@@ -316,7 +258,7 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
     return new Promise<R>((resolve, reject) => {
       // 当前客户端假设“单连接串行请求”：任何时刻仅保留一个 inFlight。
       // 该约束由 RequestScheduler 保证，避免响应乱序匹配。
-      this.inFlight = {
+      this.#inFlight = {
         tk: {
           id: tk.id,
           options: tk.options as RequestOptions<T>,
@@ -326,13 +268,13 @@ export class Client<T extends PacketFactory> extends EventEmitter<ClientEvent> {
       }
 
       void this.options.transport.send(tk.options.frame).catch((error) => {
-        this.inFlight = null
+        this.#inFlight = null
         reject(error as Error)
       })
     })
   }
 
   private nextTx(): number {
-    return this.options.packetFactory.getTransactionId(++this.sequence)
+    return this.options.packetFactory.getTransactionId(++this.#sequence)
   }
 }

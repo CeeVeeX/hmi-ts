@@ -1,19 +1,21 @@
+import type { IClient } from './client'
 import type EventEmitter from './event'
+import type { PacketFactory } from './packet'
 
 export interface ICommandPayload {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }
 
-export interface IDebugAgent extends EventEmitter<{
+export interface IDebugAgent<T extends PacketFactory> extends EventEmitter<{
   connected: () => void
   disconnected: (error: Error) => void
   destroyed: (error: Error) => void
   error: (error: Error) => void
   command: (command: string, payload: ICommandPayload) => void
 }> {
-  readonly clientId?: string
-  connect(clientId: string): Promise<void>
+  readonly client?: IClient<T>
+  connect(client: IClient<T>): Promise<void>
   // 连接状态日志
   // 请求/响应日志
   // 订阅引擎日志

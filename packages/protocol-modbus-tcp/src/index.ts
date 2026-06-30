@@ -59,14 +59,14 @@ export class ModbusTcpPacketFactory<
     return sequence & 0xffff // 事务ID为16位
   }
 
-  encodeRead(transactionId: number, options: R): Uint8Array {
+  encodeRead(options: R): Uint8Array {
     const { fn } = options
     switch (fn) {
       case ReadFn.ReadCoils:
       case ReadFn.ReadDiscreteInputs:
       case ReadFn.ReadHoldingRegisters:
       case ReadFn.ReadInputRegisters:
-        return createReadPdu(transactionId, options)
+        return createReadPdu(options)
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const _exhaustive: never = options
@@ -75,16 +75,16 @@ export class ModbusTcpPacketFactory<
     }
   }
 
-  encodeWrite(transactionId: number, options: W): Uint8Array {
+  encodeWrite(options: W): Uint8Array {
     switch (options.fn) {
       case WriteFn.WriteSingleCoil:
-        return encodeWriteSingleCoil(transactionId, options)
+        return encodeWriteSingleCoil(options)
       case WriteFn.WriteSingleRegister:
-        return encodeWriteSingleReg(transactionId, options)
+        return encodeWriteSingleReg(options)
       case WriteFn.WriteMultipleCoils:
-        return encodeWriteMultiCoils(transactionId, options)
+        return encodeWriteMultiCoils(options)
       case WriteFn.WriteMultipleRegisters:
-        return encodeWriteMultiRegs(transactionId, options)
+        return encodeWriteMultiRegs(options)
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const _exhaustive: never = options
@@ -204,7 +204,7 @@ export class ModbusTcpPacketFactory<
    * const dataChunk = packetFactory.sliceReadResponse(options, response)
    * ```
    */
-  sliceReadResponse(options: R, response: IResponse<R>): Uint8Array | null {
+  sliceReadResponse(options: R, response: IResponse<R, W>): Uint8Array | null {
     if (response.method !== RequestMethod.READ) {
       throw new Error(`响应方法与请求不匹配: ${response.method}`)
     }
@@ -258,7 +258,7 @@ export class ModbusTcpPacketFactory<
     return data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(options: R | W, d: Uint8Array): IRowResponse<R | W> {
+  decodeResponse(options: R | W, d: Uint8Array): IRowResponse<R, W> {
     const { fn } = options
     const { transactionId, functionCode, data, byteCount, exceptionCode } =
       parseModbusTcpResponse(d)
@@ -273,7 +273,7 @@ export class ModbusTcpPacketFactory<
         method,
         responseFrame: d,
         code: ModbusExceptionToResponseCode[exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
-      } as IRowResponse<R | W>
+      } as IRowResponse<R, W>
     }
 
     // 防御性校验：响应功能码必须与请求功能码一致，避免错误切片。
@@ -284,7 +284,7 @@ export class ModbusTcpPacketFactory<
         method,
         responseFrame: d,
         code: ResponseCode.RESPONSE_INVALID,
-      } as IRowResponse<R | W>
+      } as IRowResponse<R, W>
     }
 
     if (method === RequestMethod.READ) {
@@ -296,7 +296,7 @@ export class ModbusTcpPacketFactory<
         code: ResponseCode.SUCCESS,
         data, // 仅返回数据部分，去掉 MBAP 头和 PDU 功能码
         byteCount,
-      } as IRowResponse<R | W>
+      } as IRowResponse<R, W>
     } else {
       return {
         options,
@@ -304,7 +304,7 @@ export class ModbusTcpPacketFactory<
         method,
         responseFrame: d,
         code: ResponseCode.SUCCESS,
-      } as IRowResponse<R | W>
+      } as IRowResponse<R, W>
     }
   }
 }

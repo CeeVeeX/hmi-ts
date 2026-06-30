@@ -1,5 +1,5 @@
 import type { BaseReadOptions, BaseWriteOptions, CommonOptions } from './options'
-import type { DistributiveOmit } from './type'
+import type { PartialBy } from './type'
 
 export enum ResponseCode {
   // ========== 正常完成 ==========
@@ -72,11 +72,11 @@ export type IWriteResponse<T extends BaseWriteOptions> =
   | IWriteResponseSuccess<T>
   | IWriteResponseError<T>
 
-export type IResponse<T extends BaseReadOptions | BaseWriteOptions> =
-  | IReadResponse<T extends BaseReadOptions ? T : never>
-  | IWriteResponse<T extends BaseWriteOptions ? T : never>
+export type IResponse<R extends BaseReadOptions, W extends BaseWriteOptions> =
+  | IReadResponse<R>
+  | IWriteResponse<W>
 
-export type IRowResponse<T extends BaseReadOptions | BaseWriteOptions> = DistributiveOmit<
-  IResponse<T>,
+export type IRowResponse<R extends BaseReadOptions, W extends BaseWriteOptions> = PartialBy<
+  IResponse<R, W>,
   'startAt' | 'endAt'
 >

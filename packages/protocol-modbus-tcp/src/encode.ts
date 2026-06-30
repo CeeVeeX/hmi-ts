@@ -9,34 +9,34 @@ import {
 } from './type'
 
 // -------------------------- 读取编码工具函数 --------------------------
-export function createReadPdu(tId: number, opt: ReadOptions) {
+export function createReadPdu(opt: ReadOptions) {
   const pdu = new Uint8Array(5)
   pdu[0] = opt.fn
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
   pdu.set([opt.length >> 8, opt.length & 0xff], 3)
-  return wrapMbapHeader(pdu, tId, opt.unitId)
+  return wrapMbapHeader(pdu, opt.id, opt.unitId)
 }
 
 // -------------------------- 写入编码工具函数 --------------------------
-export function encodeWriteSingleCoil(tId: number, opt: WriteCoilOptions): Uint8Array {
+export function encodeWriteSingleCoil(opt: WriteCoilOptions): Uint8Array {
   const pdu = new Uint8Array(5)
   pdu[0] = WriteFn.WriteSingleCoil
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
   // 单线圈规范：0xFF00=开 0x0000=关
   const coilVal = opt.value ? 0xff00 : 0x0000
   pdu.set([coilVal >> 8, coilVal & 0xff], 3)
-  return wrapMbapHeader(pdu, tId, opt.unitId)
+  return wrapMbapHeader(pdu, opt.id, opt.unitId)
 }
 
-export function encodeWriteSingleReg(tId: number, opt: WriteRegisterOptions): Uint8Array {
+export function encodeWriteSingleReg(opt: WriteRegisterOptions): Uint8Array {
   const pdu = new Uint8Array(5)
   pdu[0] = WriteFn.WriteSingleRegister
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
   pdu.set([opt.value >> 8, opt.value & 0xff], 3)
-  return wrapMbapHeader(pdu, tId, opt.unitId)
+  return wrapMbapHeader(pdu, opt.id, opt.unitId)
 }
 
-export function encodeWriteMultiCoils(tId: number, opt: WriteCoilsOptions): Uint8Array {
+export function encodeWriteMultiCoils(opt: WriteCoilsOptions): Uint8Array {
   const coilCount = opt.value.length
   const byteCount = Math.ceil(coilCount / 8)
   const pdu = new Uint8Array(6 + byteCount)
@@ -58,10 +58,10 @@ export function encodeWriteMultiCoils(tId: number, opt: WriteCoilsOptions): Uint
     }
   }
   if (bit > 0) pdu[byteIdx] = curr
-  return wrapMbapHeader(pdu, tId, opt.unitId)
+  return wrapMbapHeader(pdu, opt.id, opt.unitId)
 }
 
-export function encodeWriteMultiRegs(tId: number, opt: WriteRegistersOptions): Uint8Array {
+export function encodeWriteMultiRegs(opt: WriteRegistersOptions): Uint8Array {
   const regCount = opt.value.length
   const byteCount = regCount * 2
   const pdu = new Uint8Array(6 + byteCount)
@@ -74,7 +74,7 @@ export function encodeWriteMultiRegs(tId: number, opt: WriteRegistersOptions): U
     pdu.set([val >> 8, val & 0xff], offset)
     offset += 2
   }
-  return wrapMbapHeader(pdu, tId, opt.unitId)
+  return wrapMbapHeader(pdu, opt.id, opt.unitId)
 }
 
 // -------------------------- 公共工具：包装Modbus TCP MBAP头 --------------------------

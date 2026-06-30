@@ -1,12 +1,12 @@
+import EventEmitter from './event'
 import type {
-  GetPFR,
   PacketFactory,
   SubscribeOptions,
+  SubscribeReadResponse,
   SubscriptionGroup,
   SubscriptionRelation,
 } from './packet'
 import { ResponseCode, type IReadResponse } from './response'
-import type { DistributiveOmit, PartialBy } from './type'
 import { sleep, uint8ArrayEquals } from './utils'
 
 /**
@@ -24,20 +24,18 @@ export interface PollGroup<T extends PacketFactory = PacketFactory> {
   running: boolean
 }
 
-/**
- * 订阅引擎依赖项。
- *
- * @example
- * ```ts
- * const options: SubscriptionEngineOptions = {
- *   read: async (options: ReadOptions) => number[],
- * }
- * ```
- */
-export interface SubscriptionEngineOptions<T extends PacketFactory> {
-  packetFactory: T
-  read: (options: GetPFR<T>) => Promise<IReadResponse<GetPFR<T>>>
-  onError?: (error: Error) => void
+export type SubscriptionEngineEvent<T extends PacketFactory = PacketFactory> = {
+  'subscribe-before': (options: SubscribeOptions<T>) => void
+  subscribed: (options: SubscribeOptions<T>) => void
+  'subscription-error': (options: SubscribeOptions<T>, error: Error) => void
+
+  'unsubscribe-before': (options: SubscribeOptions<T>) => void
+  unsubscribed: (options: SubscribeOptions<T>) => void
+  'subscription-data': (
+    options: SubscribeOptions<T>,
+    response: IReadResponse<SubscribeOptions<T>>,
+  ) => void
+  'unsubscribe-error': (options: SubscribeOptions<T>, error: Error) => void
 }
 
 /**
@@ -50,34 +48,44 @@ export interface SubscriptionEngineOptions<T extends PacketFactory> {
  * @example
  * ```ts
  * const engine = new SubscriptionEngine({ readRegisters: async () => [1, 2, 3] })
- * const unsub = engine.subscribe({ unitId: 1, start: 0, length: 2, interval: 500, callback: console.log })
+ * const un = engine.subscribe({ unitId: 1, start: 0, length: 2, interval: 500, callback: console.log })
  * engine.start()
- * unsub()
+ * un()
  * engine.stop()
  * ```
  */
-export class SubscriptionEngine<T extends PacketFactory> {
+export class SubscriptionEngine<T extends PacketFactory> extends EventEmitter<
+  SubscriptionEngineEvent<T>
+> {
   private groups = new Map<number, PollGroup<T>>()
   private running = false
   private seq = 0
 
-  constructor(private readonly options: SubscriptionEngineOptions<T>) {}
+  constructor(
+    private readonly options: {
+      packetFactory: T
+      read: (options: SubscribeOptions<T>) => Promise<IReadResponse<SubscribeOptions<T>>>
+      onError?: (error: Error) => void
+    },
+  ) {
+    super()
+  }
 
-  subscribe(params: PartialBy<SubscribeOptions<T>, 'id'>): () => void {
-    const id = `sub-${++this.seq}`
+  subscribe(params: SubscribeOptions<T>): () => void {
+    const subId = `sub-${++this.seq}`
     const sub = {
       ...params,
-      id,
+      subId,
     } as SubscriptionGroup<T>
 
     const group = this.ensureGroup(sub.interval)
-    group.subscriptions.set(id, sub)
+    group.subscriptions.set(subId, sub)
     group.relations = this.options.packetFactory.mergeSubscriptionRelations([
       ...group.subscriptions.values(),
     ])
 
     return () => {
-      group.subscriptions.delete(id)
+      group.subscriptions.delete(subId)
       group.relations = this.options.packetFactory.mergeSubscriptionRelations([
         ...group.subscriptions.values(),
       ])
@@ -164,14 +172,12 @@ export class SubscriptionEngine<T extends PacketFactory> {
 
     group.relations = this.options.packetFactory.mergeSubscriptionRelations([
       ...group.subscriptions.values(),
-    ]) as SubscriptionRelation<T>[]
+    ])
 
     for (const relation of group.relations) {
       const { range } = relation
       // frame 在内部生成，range 没有 frame 属性
-      const res = (await this.options.read(
-        range as unknown as GetPFR<T>,
-      )) as unknown as IReadResponse<SubscribeOptions<T>>
+      const res = await this.options.read(range)
 
       if (res.code !== ResponseCode.SUCCESS) continue
 
@@ -190,11 +196,11 @@ export class SubscriptionEngine<T extends PacketFactory> {
         })()
 
         if (!chunk) {
-          console.warn(`sub ${sub.id} sliceReadResponse returned null, skipping callback.`)
+          console.warn(`sub ${sub.subId} sliceReadResponse returned null, skipping callback.`)
           continue
         }
 
-        // console.log(`sub ${sub.id} callback:`, uint8ToHex(chunk))
+        // console.log(`sub ${sub.subId} callback:`, uint8ToHex(chunk))
 
         // 只在数据发生变化时触发回调，避免高频重复通知。
         if (!sub.lastData || !uint8ArrayEquals(sub.lastData, chunk)) {
@@ -202,18 +208,10 @@ export class SubscriptionEngine<T extends PacketFactory> {
           const d = {
             ...res,
             data: chunk,
-          }
+            callback: undefined, // 避免回调函数被传递给用户，导致循环引用
+          } as unknown as SubscribeReadResponse<T>
 
-          // 删除内部属性，避免回调中访问到不相关的字段。
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          delete (d.options as any).callback
-          // delete (d.options as any).lastData
-          // delete (d.options as any).interval
-          // delete (d.options as any).id
-
-          sub.callback(
-            d as unknown as IReadResponse<DistributiveOmit<SubscribeOptions<T>, 'callback'>>,
-          )
+          sub.callback(d)
         }
       }
     }
