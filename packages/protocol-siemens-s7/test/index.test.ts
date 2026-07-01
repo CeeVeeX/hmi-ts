@@ -59,7 +59,7 @@ describe('SiemensS7PacketFactory', () => {
       area: S7Area.DB,
       dbNumber: 1,
       start: 0,
-      value: [0x12, 0x34],
+      value: Uint8Array.from([0x12, 0x34]),
       frame: new Uint8Array(),
       timeout: 1000,
       priority: 0,

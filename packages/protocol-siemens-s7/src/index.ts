@@ -34,7 +34,6 @@ export interface S7ReadOptions extends BaseReadOptions {
 export interface S7WriteOptions extends BaseWriteOptions {
   area: S7Area
   dbNumber?: number
-  value: number[]
 }
 
 export type ReadOptions = S7ReadOptions
@@ -60,10 +59,6 @@ function writeUInt16BE(buffer: Uint8Array, offset: number, value: number): void 
 
 function readUInt16BE(buffer: Uint8Array, offset: number): number {
   return ((buffer[offset] ?? 0) << 8) | (buffer[offset + 1] ?? 0)
-}
-
-function toByteArray(value: number[]): Uint8Array {
-  return Uint8Array.from(value)
 }
 
 function mapItemReturnCode(code: number): ResponseCode {
@@ -194,7 +189,7 @@ function encodeReadVarRequest(transactionId: number, options: ReadOptions): Uint
 }
 
 function encodeWriteVarRequest(transactionId: number, options: WriteOptions): Uint8Array {
-  const raw = toByteArray(options.value)
+  const raw = options.value
   const parameter = new Uint8Array(2 + 12)
   parameter[0] = FUNCTION_WRITE_VAR
   parameter[1] = 0x01

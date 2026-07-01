@@ -52,19 +52,23 @@ export function encodeWriteSingleCoil(opt: WriteCoilOptions): Uint8Array {
   pdu[0] = WriteFn.WriteSingleCoil
   pdu[1] = (opt.start >> 8) & 0xff
   pdu[2] = opt.start & 0xff
-  const value = opt.value ? 0xff00 : 0x0000
+  const value = (opt.value[0] ?? 0) ? 0xff00 : 0x0000
   pdu[3] = (value >> 8) & 0xff
   pdu[4] = value & 0xff
   return wrapRtuFrame(pdu, opt.unitId)
 }
 
 export function encodeWriteSingleReg(opt: WriteRegisterOptions): Uint8Array {
+  if (opt.value.length < 2) {
+    throw new Error('WriteSingleRegister requires at least 2 bytes')
+  }
+
   const pdu = new Uint8Array(5)
   pdu[0] = WriteFn.WriteSingleRegister
   pdu[1] = (opt.start >> 8) & 0xff
   pdu[2] = opt.start & 0xff
-  pdu[3] = (opt.value >> 8) & 0xff
-  pdu[4] = opt.value & 0xff
+  pdu[3] = opt.value[0]
+  pdu[4] = opt.value[1]
   return wrapRtuFrame(pdu, opt.unitId)
 }
 
@@ -102,8 +106,12 @@ export function encodeWriteMultiCoils(opt: WriteCoilsOptions): Uint8Array {
 }
 
 export function encodeWriteMultiRegs(opt: WriteRegistersOptions): Uint8Array {
-  const count = opt.value.length
-  const byteCount = count * 2
+  if (opt.value.length % 2 !== 0) {
+    throw new Error('WriteMultipleRegisters requires even byte length')
+  }
+
+  const count = opt.value.length / 2
+  const byteCount = opt.value.length
   const pdu = new Uint8Array(6 + byteCount)
 
   pdu[0] = WriteFn.WriteMultipleRegisters
@@ -113,12 +121,7 @@ export function encodeWriteMultiRegs(opt: WriteRegistersOptions): Uint8Array {
   pdu[4] = count & 0xff
   pdu[5] = byteCount
 
-  let offset = 6
-  for (const value of opt.value) {
-    pdu[offset] = (value >> 8) & 0xff
-    pdu[offset + 1] = value & 0xff
-    offset += 2
-  }
+  pdu.set(opt.value, 6)
 
   return wrapRtuFrame(pdu, opt.unitId)
 }

@@ -61,13 +61,9 @@ export interface Mc3eCommonOptions {
   monitoringTimer?: number
 }
 
-export interface WriteBitOptions extends BaseWriteOptions, Mc3eCommonOptions {
-  value: boolean | number | boolean[] | number[]
-}
+export interface WriteBitOptions extends BaseWriteOptions, Mc3eCommonOptions {}
 
-export interface WriteWordOptions extends BaseWriteOptions, Mc3eCommonOptions {
-  value: number | number[]
-}
+export interface WriteWordOptions extends BaseWriteOptions, Mc3eCommonOptions {}
 
 export interface ReadBitOptions extends BaseReadOptions, Mc3eCommonOptions {}
 
@@ -136,14 +132,11 @@ function getDeviceCode(device: string): number {
   return Mc3eDeviceCode[normalizeDevice(device)]
 }
 
-function toBitValues(value: WriteBitOptions['value']): Array<boolean | number> {
-  if (Array.isArray(value)) {
-    return value as Array<boolean | number>
-  }
-  return [value]
+function toBitValues(value: Uint8Array): number[] {
+  return Array.from(value, (item) => (item ? 1 : 0))
 }
 
-function packBitValues(values: Array<boolean | number>): Uint8Array {
+function packBitValues(values: Array<number | boolean>): Uint8Array {
   const out = new Uint8Array(Math.ceil(values.length / 2))
   for (let i = 0; i < values.length; i += 1) {
     const on = values[i] === true || values[i] === 1
@@ -259,24 +252,14 @@ function buildWriteBody(options: Mc3eWriteOptions): Uint8Array {
   ensureUInt24(options.start, 'start')
 
   const bit = isBitDevice(options.device)
-  const values = bit
-    ? toBitValues((options as WriteBitOptions).value)
-    : Array.isArray(options.value)
-      ? options.value
-      : [options.value]
-  ensureUInt16(values.length, 'value.length')
+  const values = bit ? toBitValues(options.value) : []
+  const wordCount = bit ? values.length : options.value.length / 2
+  if (!bit && options.value.length % 2 !== 0) {
+    throw new RangeError('word write value length must be even')
+  }
+  ensureUInt16(wordCount, 'value.length')
 
-  const payload = bit
-    ? packBitValues(values)
-    : (() => {
-        const bytes = new Uint8Array(values.length * 2)
-        for (let i = 0; i < values.length; i += 1) {
-          const word = Number(values[i])
-          ensureUInt16(word, `value[${i}]`)
-          writeUInt16LE(bytes, i * 2, word)
-        }
-        return bytes
-      })()
+  const payload = bit ? packBitValues(values) : options.value
 
   const body = new Uint8Array(10 + payload.length)
   const subcommand = bit ? Mc3eSubCommand.BIT : Mc3eSubCommand.WORD
@@ -285,7 +268,7 @@ function buildWriteBody(options: Mc3eWriteOptions): Uint8Array {
   writeUInt16LE(body, 2, subcommand)
   writeUInt24LE(body, 4, options.start)
   body[7] = getDeviceCode(options.device)
-  writeUInt16LE(body, 8, values.length)
+  writeUInt16LE(body, 8, wordCount)
   body.set(payload, 10)
 
   return body

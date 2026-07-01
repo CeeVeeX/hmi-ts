@@ -55,22 +55,18 @@ export type ReadOptions =
 
 export interface WriteCoilOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleCoil
-  value: boolean | number
 }
 
 export interface WriteRegisterOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleRegister
-  value: number
 }
 
 export interface WriteCoilsOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleCoils
-  value: boolean[] | number[]
 }
 
 export interface WriteRegistersOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleRegisters
-  value: number[]
 }
 
 export type WriteOptions =

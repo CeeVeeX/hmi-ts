@@ -29,7 +29,7 @@ export interface AsciiStringEncodeOptions {
    * @example
    * ```ts
    * // "TEXT" 占用 2 个字，但指定长度为 10，返回 10 个字（后 8 个为 0）
-   * encodeAsciiString('TEXT', { length: 10 })
+   * encodeAsciiBytes('TEXT', { length: 10 })
    * // 返回: [0x5445, 0x5854, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000]
    * ```
    */
@@ -42,11 +42,11 @@ export interface AsciiStringEncodeOptions {
    * @example
    * ```ts
    * // 不截断（默认行为）
-   * encodeAsciiString('ABCDEFGHIJ', { length: 3 })
+   * encodeAsciiBytes('ABCDEFGHIJ', { length: 3 })
    * // 返回: [0x4142, 0x4344, 0x4546, 0x4748, 0x494a] (5 个字)
    *
    * // 截断模式
-   * encodeAsciiString('ABCDEFGHIJ', { length: 3, truncate: true })
+   * encodeAsciiBytes('ABCDEFGHIJ', { length: 3, truncate: true })
    * // 返回: [0x4142, 0x4344, 0x4546] (只保留前 6 个字符 'ABCDEF')
    * ```
    */
@@ -65,6 +65,8 @@ export interface AsciiStringDecodeOptions {
   asciiOnly?: boolean
   trimTrailingNull?: boolean
 }
+
+export type BitOrder = 'lsb' | 'msb'
 
 function ensureByte(value: number, field: string): void {
   if (!Number.isInteger(value) || value < 0 || value > 0xff) {
@@ -111,6 +113,30 @@ function toRegisters(bytes: Uint8Array): number[] {
   return out
 }
 
+function ensureUint16(value: number, field: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
+    throw new RangeError(`${field} must be an integer in range 0..65535`)
+  }
+}
+
+function ensureInt16(value: number, field: string): void {
+  if (!Number.isInteger(value) || value < -0x8000 || value > 0x7fff) {
+    throw new RangeError(`${field} must be an integer in range -32768..32767`)
+  }
+}
+
+function ensureUint32(value: number, field: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+    throw new RangeError(`${field} must be an integer in range 0..4294967295`)
+  }
+}
+
+function ensureInt32(value: number, field: string): void {
+  if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+    throw new RangeError(`${field} must be an integer in range -2147483648..2147483647`)
+  }
+}
+
 /**
  * Uint8Array 转 布尔
  */
@@ -122,16 +148,24 @@ export function decodeBoolean(bytes: Uint8Array): boolean {
 }
 
 /**
- * Uint8Array 转二进制字符串 LSB（低位优先）
- * @param bytes 输入字节数组
- * @param maxBits 最多显示的位数，默认显示所有
+ * Uint8Array 转位数组。
  */
-export function decodeLSBinary(bytes: Uint8Array, maxBits?: number): (0 | 1)[] {
+export function decodeBits(
+  bytes: Uint8Array,
+  maxBits?: number,
+  order: BitOrder = 'lsb',
+): (0 | 1)[] {
   const bits: (0 | 1)[] = []
 
   for (const byte of bytes) {
-    for (let i = 0; i < 8; i++) {
-      bits.push(((byte >> i) & 1) as 0 | 1)
+    if (order === 'lsb') {
+      for (let i = 0; i < 8; i += 1) {
+        bits.push(((byte >> i) & 1) as 0 | 1)
+      }
+    } else {
+      for (let i = 7; i >= 0; i -= 1) {
+        bits.push(((byte >> i) & 1) as 0 | 1)
+      }
     }
   }
 
@@ -139,20 +173,24 @@ export function decodeLSBinary(bytes: Uint8Array, maxBits?: number): (0 | 1)[] {
 }
 
 /**
- * Uint8Array 转二进制字符串 MSB（高位优先）
- * @param bytes 输入字节数组
- * @param maxBits 最多显示的位数，默认显示所有
+ * 位列表编码为 Uint8Array（每个元素为 0/1）。
  */
-export function decodeMSBinary(bytes: Uint8Array, maxBits?: number): (0 | 1)[] {
-  const bits: (0 | 1)[] = []
-
-  for (const byte of bytes) {
-    for (let i = 7; i >= 0; i--) {
-      bits.push(((byte >> i) & 1) as 0 | 1)
-    }
+export function encodeBits(value: boolean[] | number[]): Uint8Array {
+  if (!Array.isArray(value)) {
+    throw new TypeError('value must be an array')
   }
 
-  return maxBits !== undefined ? bits.slice(-maxBits) : bits
+  return Uint8Array.from(
+    value.map((item, index) => {
+      if (typeof item === 'boolean') {
+        return item ? 1 : 0
+      }
+      if (typeof item === 'number' && Number.isInteger(item) && (item === 0 || item === 1)) {
+        return item
+      }
+      throw new RangeError(`bit value at index ${index} must be boolean or 0/1`)
+    }),
+  )
 }
 
 /**
@@ -170,6 +208,14 @@ export function decodeUint16(bytes: Uint8Array): number {
 }
 
 /**
+ * 将 Uint16 编码为 2 字节（大端）。
+ */
+export function encodeUint16(value: number): Uint8Array {
+  ensureUint16(value, 'value')
+  return Uint8Array.of((value >> 8) & 0xff, value & 0xff)
+}
+
+/**
  * 把首个字按有符号 16 位整数解码。
  *
  * @example
@@ -181,6 +227,17 @@ export function decodeInt16(bytes: Uint8Array): number {
   const input = getPaddedBytes(bytes, 2)
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getInt16(0)
+}
+
+/**
+ * 将 Int16 编码为 2 字节（大端）。
+ */
+export function encodeInt16(value: number): Uint8Array {
+  ensureInt16(value, 'value')
+  const out = new Uint8Array(2)
+  const view = new DataView(out.buffer)
+  view.setInt16(0, value)
+  return out
 }
 
 /**
@@ -198,6 +255,17 @@ export function decodeUint32(bytes: Uint8Array, options?: SwapOptions): number {
 }
 
 /**
+ * 将 Uint32 编码为 4 字节。
+ */
+export function encodeUint32(value: number, options?: SwapOptions): Uint8Array {
+  ensureUint32(value, 'value')
+  const bytes = new Uint8Array(4)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, value)
+  return applySwaps(bytes, options)
+}
+
+/**
  * 将两个字解码为有符号 32 位整数。
  *
  * @example
@@ -209,6 +277,17 @@ export function decodeInt32(bytes: Uint8Array, options?: SwapOptions): number {
   const input = applySwaps(getPaddedBytes(bytes, 4), options)
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getInt32(0)
+}
+
+/**
+ * 将 Int32 编码为 4 字节。
+ */
+export function encodeInt32(value: number, options?: SwapOptions): Uint8Array {
+  ensureInt32(value, 'value')
+  const bytes = new Uint8Array(4)
+  const view = new DataView(bytes.buffer)
+  view.setInt32(0, value)
+  return applySwaps(bytes, options)
 }
 
 /**
@@ -249,11 +328,11 @@ export function decodeFloat64(bytes: Uint8Array, options?: SwapOptions): number 
  * const regs = encodeFloat32(3.14, { wordSwap: true })
  * ```
  */
-export function encodeFloat32(value: number, options?: SwapOptions): number[] {
+export function encodeFloat32(value: number, options?: SwapOptions): Uint8Array {
   const bytes = new Uint8Array(4)
   const view = new DataView(bytes.buffer)
   view.setFloat32(0, value)
-  return toRegisters(applySwaps(bytes, options))
+  return applySwaps(bytes, options)
 }
 
 /**
@@ -264,24 +343,27 @@ export function encodeFloat32(value: number, options?: SwapOptions): number[] {
  * const regs = encodeFloat64(3.1415926)
  * ```
  */
-export function encodeFloat64(value: number, options?: SwapOptions): number[] {
+export function encodeFloat64(value: number, options?: SwapOptions): Uint8Array {
   const bytes = new Uint8Array(8)
   const view = new DataView(bytes.buffer)
   view.setFloat64(0, value)
-  return toRegisters(applySwaps(bytes, options))
+  return applySwaps(bytes, options)
 }
 
 /**
- * 将 ASCII 字符串编码为字数组（每字 2 字节）。
+ * 将 ASCII 字符串编码为字节数组（每 2 字节一组）。
  *
  * @example
  * ```ts
- * encodeAsciiString('HELLO', { padByte: 0x20 })
- * encodeAsciiString('TEXT', { length: 10 }) // 固定 10 个字，未使用的填充 0
- * encodeAsciiString('ABCDEFGHIJ', { length: 3, truncate: true }) // 截断为前 6 个字符
+ * encodeAsciiBytes('HELLO', { padByte: 0x20 })
+ * encodeAsciiBytes('TEXT', { length: 10 }) // 固定 10 个字，未使用的填充 0
+ * encodeAsciiBytes('ABCDEFGHIJ', { length: 3, truncate: true }) // 截断为前 6 个字符
  * ```
  */
-export function encodeAsciiString(value: string, options: AsciiStringEncodeOptions = {}): number[] {
+export function encodeAsciiBytes(
+  value: string,
+  options: AsciiStringEncodeOptions = {},
+): Uint8Array {
   const padByte = options.padByte ?? 0x00
   const asciiOnly = options.asciiOnly ?? true
   const fixedLength = options.length
@@ -310,7 +392,7 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
     outputLength = requiredLength
   }
 
-  const out = new Array<number>(outputLength)
+  const out = new Uint8Array(outputLength * 2)
   let offset = 0
 
   // 编码字符串字符到字
@@ -330,15 +412,38 @@ export function encodeAsciiString(value: string, options: AsciiStringEncodeOptio
       ensureByte(lo, `charCodeAt(${i + 1})`)
     }
 
-    out[offset++] = (hi << 8) | lo
+    out[offset++] = hi
+    out[offset++] = lo
   }
 
-  // 如果指定了固定长度，用 padByte 填充剩余字
-  while (offset < outputLength) {
-    out[offset++] = (padByte << 8) | padByte
+  // 如果指定了固定长度，用 padByte 填充剩余字节
+  while (offset < out.length) {
+    out[offset++] = padByte
   }
 
   return out
+}
+
+/**
+ * 将 Uint16 数组编码为连续字节数组（大端）。
+ */
+export function encodeUint16Array(values: number[]): Uint8Array {
+  const out = new Uint8Array(values.length * 2)
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i]
+    ensureUint16(value, `values[${i}]`)
+    out[i * 2] = (value >> 8) & 0xff
+    out[i * 2 + 1] = value & 0xff
+  }
+  return out
+}
+
+/**
+ * 将连续字节数组按 Uint16（大端）解码为数组。
+ */
+export function decodeUint16Array(bytes: Uint8Array): number[] {
+  const padded = bytes.length % 2 === 0 ? bytes : getPaddedBytes(bytes, bytes.length + 1)
+  return toRegisters(padded)
 }
 
 /**
@@ -373,6 +478,13 @@ export function decodeAsciiString(
   }
 
   return out
+}
+
+/**
+ * 将布尔值编码为单字节（0x00/0x01）。
+ */
+export function encodeBoolean(value: boolean): Uint8Array {
+  return Uint8Array.of(value ? 1 : 0)
 }
 
 /**

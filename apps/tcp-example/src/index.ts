@@ -1,8 +1,8 @@
 import 'dotenv/config'
 import { Client } from '@hmi-ts/client'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
-import { ModbusTcpPacketFactory, ReadFn } from '@hmi-ts/protocol-modbus-tcp'
-import { decodeLSBinary, decodeMSBinary, uint8ToHex } from '@hmi-ts/codec'
+import { ModbusTcpPacketFactory, ReadFn, WriteFn } from '@hmi-ts/protocol-modbus-tcp'
+import { decodeAsciiString, encodeAsciiBytes, encodeBits, encodeUint16 } from '@hmi-ts/codec'
 import { ResponseCode } from '@hmi-ts/core'
 import { DebugAgent } from '@hmi-ts/debug-agent'
 
@@ -58,6 +58,27 @@ async function main(): Promise<void> {
     //     console.error('write failed:', error)
     //   }
     // }, 20)
+
+    client.write({
+      fn: WriteFn.WriteMultipleCoils,
+      start: 0,
+      value: encodeBits([false, true, false, true]),
+    })
+
+    client.write({
+      fn: WriteFn.WriteMultipleRegisters,
+      start: 0,
+      value: encodeUint16(1000),
+    })
+
+    client.write({
+      fn: WriteFn.WriteMultipleRegisters,
+      start: 0,
+      value: encodeAsciiBytes('Hello, Modbus!', {
+        length: 16,
+        padByte: 0x20,
+      }),
+    })
   })
   client.on('disconnected', () => console.log('disconnected'))
   client.on('error', (err) => console.error('error', err))
@@ -93,20 +114,26 @@ async function main(): Promise<void> {
   //   },
   // })
 
-  // client.subscribe({
-  //   fn: ReadFn.ReadHoldingRegisters,
-  //   start: 102,
-  //   length: 2,
-  //   // interval: 2000,
-  //   callback: (data) => {
-  //     if (data.code !== ResponseCode.SUCCESS) {
-  //       console.error('subscribe data error:', data)
-  //       return
-  //     }
+  client.subscribe({
+    fn: ReadFn.ReadHoldingRegisters,
+    start: 0,
+    length: 16,
+    // interval: 2000,
+    callback: (data) => {
+      if (data.code !== ResponseCode.SUCCESS) {
+        console.error('subscribe data error:', data)
+        return
+      }
 
-  //     console.log(`2请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeInt32(data.data))
-  //   },
-  // })
+      console.log(
+        `2请求耗时:`,
+        data.endAt - data.startAt,
+        'ms',
+        '数据:',
+        decodeAsciiString(data.data),
+      )
+    },
+  })
 
   // for (let i = 0; i < 10; i++) {
   //   client.subscribe({
@@ -131,36 +158,36 @@ async function main(): Promise<void> {
   //   })
   // }
 
-  client.subscribe({
-    fn: ReadFn.ReadCoils,
-    start: 0,
-    length: 4,
-    // interval: 2000,
-    callback: (data) => {
-      if (data.code !== ResponseCode.SUCCESS) {
-        console.error('subscribe data error:', data)
-        return
-      }
+  // client.subscribe({
+  //   fn: ReadFn.ReadCoils,
+  //   start: 0,
+  //   length: 4,
+  //   // interval: 2000,
+  //   callback: (data) => {
+  //     if (data.code !== ResponseCode.SUCCESS) {
+  //       console.error('subscribe data error:', data)
+  //       return
+  //     }
 
-      console.log(
-        '请求：',
-        uint8ToHex(data.options.frame),
-        '响应:',
-        uint8ToHex(data.responseFrame),
-        '数据:',
-        data.data,
-      )
+  //     console.log(
+  //       '请求：',
+  //       uint8ToHex(data.options.frame),
+  //       '响应:',
+  //       uint8ToHex(data.responseFrame),
+  //       '数据:',
+  //       data.data,
+  //     )
 
-      console.log(
-        '1请求耗时:',
-        data.endAt - data.startAt,
-        'ms',
-        '数据:',
-        decodeLSBinary(data.data, data.options.length),
-        decodeMSBinary(data.data, data.options.length),
-      )
-    },
-  })
+  //     console.log(
+  //       '1请求耗时:',
+  //       data.endAt - data.startAt,
+  //       'ms',
+  //       '数据:',
+  //       decodeLSBinary(data.data, data.options.length),
+  //       decodeMSBinary(data.data, data.options.length),
+  //     )
+  //   },
+  // })
 
   // client.subscribe({
   //   fn: ReadFn.ReadCoils,

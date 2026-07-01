@@ -31,9 +31,9 @@ export interface CommonOptions {
 
 export interface BaseWriteOptions extends CommonOptions {
   /**
-   * 写入的数据，类型可以是单个数值或布尔值，也可以是数值数组或布尔值数组。
+   * 写入的数据
    */
-  value: number | number[] | boolean | boolean[]
+  value: Uint8Array
 }
 
 export interface BaseReadOptions extends CommonOptions {

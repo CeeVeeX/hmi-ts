@@ -54,7 +54,7 @@ describe('Mc4ePacketFactory', () => {
       id: 0x0021,
       unitId: 1,
       start: 200,
-      value: [0x1234, 0x5678],
+      value: Uint8Array.from([0x34, 0x12, 0x78, 0x56]),
       device: 'D',
       frame: new Uint8Array(),
       timeout: 1000,

@@ -44,19 +44,15 @@ export type ReadOptions =
 
 export interface WriteCoilOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleCoil
-  value: boolean | number
 }
 export interface WriteRegisterOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleRegister
-  value: number
 }
 export interface WriteCoilsOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleCoils
-  value: boolean[] | number[]
 }
 export interface WriteRegistersOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleRegisters
-  value: number[]
 }
 
 export type WriteOptions =
@@ -230,16 +226,20 @@ function encodeWriteSingleCoil(opt: WriteCoilOptions): Uint8Array {
   const pdu = new Uint8Array(5)
   pdu[0] = WriteFn.WriteSingleCoil
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
-  const coilVal = opt.value ? 0xff00 : 0x0000
+  const coilVal = (opt.value[0] ?? 0) ? 0xff00 : 0x0000
   pdu.set([coilVal >> 8, coilVal & 0xff], 3)
   return pdu
 }
 
 function encodeWriteSingleReg(opt: WriteRegisterOptions): Uint8Array {
+  if (opt.value.length < 2) {
+    throw new Error('WriteSingleRegister requires at least 2 bytes')
+  }
+
   const pdu = new Uint8Array(5)
   pdu[0] = WriteFn.WriteSingleRegister
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
-  pdu.set([opt.value >> 8, opt.value & 0xff], 3)
+  pdu.set([opt.value[0], opt.value[1]], 3)
   return pdu
 }
 
@@ -268,18 +268,18 @@ function encodeWriteMultiCoils(opt: WriteCoilsOptions): Uint8Array {
 }
 
 function encodeWriteMultiRegs(opt: WriteRegistersOptions): Uint8Array {
-  const regCount = opt.value.length
-  const byteCount = regCount * 2
+  if (opt.value.length % 2 !== 0) {
+    throw new Error('WriteMultipleRegisters requires even byte length')
+  }
+
+  const regCount = opt.value.length / 2
+  const byteCount = opt.value.length
   const pdu = new Uint8Array(6 + byteCount)
   pdu[0] = WriteFn.WriteMultipleRegisters
   pdu.set([opt.start >> 8, opt.start & 0xff], 1)
   pdu.set([regCount >> 8, regCount & 0xff], 3)
   pdu[5] = byteCount
-  let offset = 6
-  for (const val of opt.value) {
-    pdu.set([val >> 8, val & 0xff], offset)
-    offset += 2
-  }
+  pdu.set(opt.value, 6)
   return pdu
 }
 

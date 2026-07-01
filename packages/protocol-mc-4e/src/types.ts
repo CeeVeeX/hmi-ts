@@ -44,13 +44,9 @@ export interface Mc4eCommonOptions {
   monitoringTimer?: number
 }
 
-export interface WriteBitOptions extends BaseWriteOptions, Mc4eCommonOptions {
-  value: boolean | number | boolean[] | number[]
-}
+export interface WriteBitOptions extends BaseWriteOptions, Mc4eCommonOptions {}
 
-export interface WriteWordOptions extends BaseWriteOptions, Mc4eCommonOptions {
-  value: number | number[]
-}
+export interface WriteWordOptions extends BaseWriteOptions, Mc4eCommonOptions {}
 
 export interface ReadBitOptions extends BaseReadOptions, Mc4eCommonOptions {}
 

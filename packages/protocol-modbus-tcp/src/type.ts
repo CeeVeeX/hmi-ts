@@ -70,19 +70,15 @@ export type ReadOptions =
 // -------------------------- 写入类型（带判别type） --------------------------
 export interface WriteCoilOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleCoil
-  value: boolean | number // 单线圈 0/1
 }
 export interface WriteRegisterOptions extends BaseWriteOptions {
   fn: WriteFn.WriteSingleRegister
-  value: number // 单寄存器 0~65535
 }
 export interface WriteCoilsOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleCoils
-  value: boolean[] | number[] // 多线圈数组
 }
 export interface WriteRegistersOptions extends BaseWriteOptions {
   fn: WriteFn.WriteMultipleRegisters
-  value: number[] // 多寄存器数组
 }
 
 export type WriteOptions =
