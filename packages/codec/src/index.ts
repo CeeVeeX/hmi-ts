@@ -381,7 +381,7 @@ export function decodeAsciiString(
  * @param separator 可选的分隔符，默认为空格
  * @returns 转换后的十六进制字符串
  */
-export function uint8ToHex(arr: Uint8Array, separator?: string): string {
+export function uint8ToHex(arr: Uint8Array | number[], separator?: string): string {
   return Array.from(arr)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join(separator ?? ' ')

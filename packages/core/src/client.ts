@@ -80,12 +80,12 @@ export interface ClientEvent<T extends PacketFactory = PacketFactory> {
   error: (error: Error) => void
   // 请求/响应事件
   'write-before': (options: WriteOptions<T>) => void
-  written: (options: WriteOptions<T>) => void
-  'write-error': (options: WriteOptions<T>, error: Error) => void
+  written: (response: IWriteResponse<WriteOptions<T>>) => void
+  'write-error': (e: { options: WriteOptions<T>; error: string }) => void
 
   'read-before': (options: ReadOptions<T>) => void
-  read: (options: ReadOptions<T>, response: IReadResponse<ReadOptions<T>>) => void
-  'read-error': (options: ReadOptions<T>, error: Error) => void
+  read: (response: IReadResponse<ReadOptions<T>>) => void
+  'read-error': (e: { options: ReadOptions<T>; error: string }) => void
 }
 
 export interface IClient<T extends PacketFactory> extends EventEmitter<ClientEvent<T>> {

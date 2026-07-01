@@ -171,11 +171,14 @@ export class Client<T extends PacketFactory<any, any>>
         reject: () => {},
       })
 
-      this.emit('written', opts)
+      this.emit('written', response)
 
       return response
     } catch (error) {
-      this.emit('write-error', options as WriteOptions<T>, error as Error)
+      this.emit('write-error', {
+        options: opts,
+        error: (error as Error).message,
+      })
 
       return Promise.reject(error)
     }
@@ -207,11 +210,14 @@ export class Client<T extends PacketFactory<any, any>>
         reject: () => {},
       })
 
-      this.emit('read', opts, response)
+      this.emit('read', response)
 
       return response
     } catch (error) {
-      this.emit('read-error', options as ReadOptions<T>, error as Error)
+      this.emit('read-error', {
+        options: opts,
+        error: (error as Error).message,
+      })
       return Promise.reject(error)
     }
   }

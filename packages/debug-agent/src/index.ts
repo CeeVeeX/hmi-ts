@@ -15,6 +15,12 @@ export interface DebugAgentOptions {
   password?: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function replacer(key: string, val: any) {
+  if (val instanceof Uint8Array) return Array.from(val)
+  return val
+}
+
 export class DebugAgent<T extends PacketFactory> extends EventEmitter implements IDebugAgent<T> {
   connection?: mqtt.MqttClient
 
@@ -84,16 +90,34 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
         console.error('Failed to parse MQTT message:', error)
       }
     })
+
+    client.on('read-before', (o) => this.push('read-before', o))
+    client.on('read', (r) => this.push('read', r))
+    client.on('read-error', (error) => this.push('read-error', error))
+
+    client.on('write-before', (o) => this.push('write-before', o))
+    client.on('written', (r) => this.push('written', r))
+    client.on('write-error', (error) => this.push('write-error', error))
+
+    client.subscriptionEngine.on('subscribe-before', (o) => this.push('subscribe-before', o))
+    client.subscriptionEngine.on('subscribed', (o) => this.push('subscribed', o))
+    client.subscriptionEngine.on('subscription-error', (o) => this.push('subscription-error', o))
+
+    client.subscriptionEngine.on('unsubscribe-before', (o) => this.push('unsubscribe-before', o))
+    client.subscriptionEngine.on('unsubscribed', (o) => this.push('unsubscribed', o))
+    client.subscriptionEngine.on('unsubscribe-error', (o) => this.push('unsubscribe-error', o))
   }
 
   /**
    * 主动推送调试信息到调试器
    */
-  push(command: string, payload: ICommandPayload) {
+  push(command: string, payload: object) {
     if (!this.client) {
       console.error('DebugAgent client is not set. Call connect() first.')
       return
     }
+
+    // console.log(`DebugAgent push: ${command}`, payload)
 
     const topic = `report/${this.client.clientId}/${command}`
 
@@ -101,7 +125,7 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
       return
     }
 
-    this.connection.publish(topic, JSON.stringify(payload))
+    this.connection.publish(topic, JSON.stringify(payload, replacer))
   }
 
   /**

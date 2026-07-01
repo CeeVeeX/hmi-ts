@@ -21,7 +21,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel --filter=!@hmi-ts/tcp-example --filter=!@hmi-ts/vue-example --filter=!@hmi-ts/vue-components",
-    "dev:modbus-tcp": "turbo run dev --parallel --filter=@hmi-ts/core --filter=@hmi-ts/codec --filter=@hmi-ts/client --filter=@hmi-ts/protocol-modbus-tcp --filter=@hmi-ts/codec --filter=@hmi-ts/transport-tcp",
+    "dev:modbus-tcp": "turbo run dev --parallel --filter=@hmi-ts/core --filter=@hmi-ts/codec --filter=@hmi-ts/client --filter=@hmi-ts/protocol-modbus-tcp --filter=@hmi-ts/codec --filter=@hmi-ts/transport-tcp --filter=@hmi-ts/debug-agent",
     "dev:tcp-example": "pnpm --filter @hmi-ts/tcp-example dev",
     "dev:node-udp-example": "pnpm --filter @hmi-ts/node-udp-example dev",
     "dev:browser-example": "pnpm --filter @hmi-ts/browser-example dev",

@@ -27,15 +27,12 @@ export interface PollGroup<T extends PacketFactory = PacketFactory> {
 export type SubscriptionEngineEvent<T extends PacketFactory = PacketFactory> = {
   'subscribe-before': (options: SubscribeOptions<T>) => void
   subscribed: (options: SubscribeOptions<T>) => void
-  'subscription-error': (options: SubscribeOptions<T>, error: Error) => void
+  'subscription-error': (e: { options: SubscribeOptions<T>; error: string }) => void
 
   'unsubscribe-before': (options: SubscribeOptions<T>) => void
   unsubscribed: (options: SubscribeOptions<T>) => void
-  'subscription-data': (
-    options: SubscribeOptions<T>,
-    response: IReadResponse<SubscribeOptions<T>>,
-  ) => void
-  'unsubscribe-error': (options: SubscribeOptions<T>, error: Error) => void
+  'subscription-data': (response: IReadResponse<SubscribeOptions<T>>) => void
+  'unsubscribe-error': (e: { options: SubscribeOptions<T>; error: string }) => void
 }
 
 /**
