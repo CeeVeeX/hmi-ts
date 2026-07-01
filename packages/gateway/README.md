@@ -1,6 +1,8 @@
 # @hmi-ts/gateway
 
-WebSocket to TCP Modbus relay gateway for browser clients.
+通用 WebSocket 网关，面向浏览器到任意上游传输的协议桥接。
+
+典型链路：`ws -> gateway -> (tcp | udp | 其他自定义上游)`
 
 ## Installation
 
@@ -10,18 +12,57 @@ pnpm add @hmi-ts/gateway
 
 ## Core Exports
 
+- Gateway
 - GatewayOptions
+- GatewayUpstream
+- GatewayUpstreamFactory
+- createTcpUpstreamFactory
+- createUdpUpstreamFactory
 - ModbusGateway
+- ModbusGatewayOptions
 
 ## Minimal Example
 
 ```ts
-import { ModbusGateway } from '@hmi-ts/gateway'
+import { Gateway, createTcpUpstreamFactory } from '@hmi-ts/gateway'
 
-const gateway = new ModbusGateway({
+const gateway = new Gateway({
   wsPort: 18080,
-  plcHost: '127.0.0.1',
-  plcPort: 502,
+  createUpstream: createTcpUpstreamFactory({ host: '127.0.0.1', port: 502 }),
+})
+
+await gateway.start()
+```
+
+## UDP Example
+
+```ts
+import { Gateway, createUdpUpstreamFactory } from '@hmi-ts/gateway'
+
+const gateway = new Gateway({
+  wsPort: 18080,
+  createUpstream: createUdpUpstreamFactory({ host: '127.0.0.1', port: 502 }),
+})
+
+await gateway.start()
+```
+
+## Custom Upstream Example
+
+```ts
+import { Gateway, type GatewayUpstream } from '@hmi-ts/gateway'
+
+const gateway = new Gateway({
+  wsPort: 18080,
+  createUpstream: async (): Promise<GatewayUpstream> => {
+    // 这里可接入你自己的串口、消息队列或其他协议实现
+    return {
+      send: async (_data) => {},
+      close: async () => {},
+      onMessage: (_cb) => {},
+      onClose: (_cb) => {},
+    }
+  },
 })
 
 await gateway.start()
@@ -30,8 +71,9 @@ await gateway.start()
 ## Behavior
 
 - Accepts browser WebSocket connections
-- Relays binary frames to PLC over TCP
-- Uses internal TCP connection pool for reuse
+- Relays binary frames to pluggable upstream transports
+- Supports built-in TCP and UDP upstream factories
+- Keeps `ModbusGateway` for backward compatibility
 
 ## Packages
 

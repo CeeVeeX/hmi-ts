@@ -1,59 +1,208 @@
+import dgram from 'node:dgram'
 import net from 'node:net'
 import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 
-interface PooledSocket {
-  socket: net.Socket
-  busy: boolean
-  endpoint: string
+/**
+ * 网关上游连接抽象：WS 下行与任意上游传输之间的最小桥接协议。
+ */
+export interface GatewayUpstream {
+  send(data: Uint8Array): Promise<void> | void
+  close(): Promise<void> | void
+  onMessage(cb: (data: Uint8Array) => void): void
+  onClose(cb: (err?: Error) => void): void
 }
 
-class TcpConnectionPool {
-  private pool = new Map<string, PooledSocket[]>()
+export type GatewayUpstreamFactory = () => Promise<GatewayUpstream> | GatewayUpstream
 
-  async acquire(host: string, port: number): Promise<PooledSocket> {
-    const endpoint = `${host}:${port}`
-    const candidates = this.pool.get(endpoint) ?? []
-    // 优先复用空闲连接，减少频繁建连的握手开销。
-    const idle = candidates.find((entry) => !entry.busy && !entry.socket.destroyed)
-    if (idle) {
-      idle.busy = true
-      return idle
+/**
+ * 通用网关选项：浏览器 WS 入站 + 可插拔上游工厂。
+ */
+export interface GatewayOptions {
+  wsPort: number
+  createUpstream: GatewayUpstreamFactory
+}
+
+/**
+ * 向后兼容的 Modbus 网关选项。
+ */
+export interface ModbusGatewayOptions {
+  wsPort: number
+  plcHost: string
+  plcPort: number
+}
+
+/**
+ * TCP 上游配置。
+ */
+export interface TcpUpstreamOptions {
+  host: string
+  port: number
+}
+
+/**
+ * UDP 上游配置。
+ */
+export interface UdpUpstreamOptions {
+  host: string
+  port: number
+  bindAddress?: string
+  bindPort?: number
+}
+
+class TcpUpstream implements GatewayUpstream {
+  private messageCallbacks: Array<(data: Uint8Array) => void> = []
+  private closeCallbacks: Array<(err?: Error) => void> = []
+  private closed = false
+
+  constructor(private readonly socket: net.Socket) {
+    socket.on('data', (chunk) => {
+      const payload = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+      this.messageCallbacks.forEach((cb) => cb(payload))
+    })
+
+    socket.on('error', (err) => {
+      this.emitClose(err)
+    })
+
+    socket.on('close', () => {
+      this.emitClose()
+    })
+  }
+
+  async send(data: Uint8Array): Promise<void> {
+    if (this.socket.destroyed) {
+      throw new Error('tcp upstream closed')
     }
 
-    const socket = await this.createSocket(host, port)
-    const entry: PooledSocket = { socket, busy: true, endpoint }
-    const list = this.pool.get(endpoint) ?? []
-    list.push(entry)
-    this.pool.set(endpoint, list)
-    return entry
+    await new Promise<void>((resolve, reject) => {
+      this.socket.write(data, (err) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve()
+      })
+    })
   }
 
-  release(entry: PooledSocket): void {
-    entry.busy = false
+  async close(): Promise<void> {
+    if (this.socket.destroyed) {
+      return
+    }
+
+    await new Promise<void>((resolve) => {
+      this.socket.once('close', () => resolve())
+      this.socket.end()
+      this.socket.destroy()
+    })
   }
 
-  async closeAll(): Promise<void> {
-    const all = [...this.pool.values()].flat()
-    await Promise.all(
-      all.map(
-        ({ socket }) =>
-          new Promise<void>((resolve) => {
-            socket.once('close', () => resolve())
-            socket.destroy()
-          }),
-      ),
-    )
-    this.pool.clear()
+  onMessage(cb: (data: Uint8Array) => void): void {
+    this.messageCallbacks.push(cb)
   }
 
-  private async createSocket(host: string, port: number): Promise<net.Socket> {
+  onClose(cb: (err?: Error) => void): void {
+    this.closeCallbacks.push(cb)
+  }
+
+  private emitClose(err?: Error): void {
+    if (this.closed) {
+      return
+    }
+    this.closed = true
+    this.closeCallbacks.forEach((cb) => cb(err))
+  }
+}
+
+class UdpUpstream implements GatewayUpstream {
+  private messageCallbacks: Array<(data: Uint8Array) => void> = []
+  private closeCallbacks: Array<(err?: Error) => void> = []
+  private closed = false
+
+  constructor(
+    private readonly socket: dgram.Socket,
+    private readonly options: UdpUpstreamOptions,
+  ) {
+    socket.on('message', (msg) => {
+      const data = new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength)
+      this.messageCallbacks.forEach((cb) => cb(data))
+    })
+
+    socket.on('error', (err) => {
+      this.emitClose(err)
+    })
+
+    socket.on('close', () => {
+      this.emitClose()
+    })
+  }
+
+  async send(data: Uint8Array): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.socket.send(data, this.options.port, this.options.host, (err) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve()
+      })
+    })
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) {
+      return
+    }
+
+    await new Promise<void>((resolve) => {
+      this.socket.once('close', () => resolve())
+      this.socket.close()
+    })
+  }
+
+  onMessage(cb: (data: Uint8Array) => void): void {
+    this.messageCallbacks.push(cb)
+  }
+
+  onClose(cb: (err?: Error) => void): void {
+    this.closeCallbacks.push(cb)
+  }
+
+  private emitClose(err?: Error): void {
+    if (this.closed) {
+      return
+    }
+    this.closed = true
+    this.closeCallbacks.forEach((cb) => cb(err))
+  }
+}
+
+export function createTcpUpstreamFactory(options: TcpUpstreamOptions): GatewayUpstreamFactory {
+  return async () => {
     const socket = new net.Socket()
     await new Promise<void>((resolve, reject) => {
       socket.once('error', reject)
-      socket.connect(port, host, () => resolve())
+      socket.connect(options.port, options.host, () => {
+        socket.off('error', reject)
+        resolve()
+      })
     })
     socket.setNoDelay(true)
-    return socket
+    return new TcpUpstream(socket)
+  }
+}
+
+export function createUdpUpstreamFactory(options: UdpUpstreamOptions): GatewayUpstreamFactory {
+  return async () => {
+    const socket = dgram.createSocket('udp4')
+    await new Promise<void>((resolve, reject) => {
+      socket.once('error', reject)
+      socket.bind(options.bindPort ?? 0, options.bindAddress, () => {
+        socket.off('error', reject)
+        resolve()
+      })
+    })
+    return new UdpUpstream(socket, options)
   }
 }
 
@@ -65,12 +214,6 @@ class TcpConnectionPool {
  * const options: GatewayOptions = { wsPort: 18080, plcHost: '127.0.0.1', plcPort: 502 }
  * ```
  */
-export interface GatewayOptions {
-  wsPort: number
-  plcHost: string
-  plcPort: number
-}
-
 function rawDataToBuffer(message: RawData): Buffer {
   // ws 的 message 可能是 Buffer / ArrayBuffer / Buffer[]，统一归一化后再写 TCP。
   if (Buffer.isBuffer(message)) {
@@ -92,8 +235,34 @@ function rawDataToBuffer(message: RawData): Buffer {
  * ```
  */
 export class ModbusGateway {
+  private readonly gateway: Gateway
+
+  constructor(options: ModbusGatewayOptions) {
+    this.gateway = new Gateway({
+      wsPort: options.wsPort,
+      createUpstream: createTcpUpstreamFactory({
+        host: options.plcHost,
+        port: options.plcPort,
+      }),
+    })
+  }
+
+  async start(): Promise<void> {
+    await this.gateway.start()
+  }
+
+  async stop(): Promise<void> {
+    await this.gateway.stop()
+  }
+}
+
+/**
+ * 通用 WS 桥接网关：
+ * 浏览器侧只走 WS，上游可插拔为 TCP / UDP / 其他协议适配器。
+ */
+export class Gateway {
   private wss: WebSocketServer | null = null
-  private pool = new TcpConnectionPool()
+  private readonly upstreams = new Set<GatewayUpstream>()
 
   constructor(private readonly options: GatewayOptions) {}
 
@@ -117,55 +286,46 @@ export class ModbusGateway {
       this.wss?.close(() => resolve())
     })
     this.wss = null
-    await this.pool.closeAll()
+
+    const all = [...this.upstreams]
+    this.upstreams.clear()
+    await Promise.all(all.map((upstream) => Promise.resolve(upstream.close())))
   }
 
   private async handleConnection(ws: WebSocket): Promise<void> {
-    const entry = await this.pool.acquire(this.options.plcHost, this.options.plcPort)
-    const { socket } = entry
+    const upstream = await this.options.createUpstream()
+    this.upstreams.add(upstream)
     let released = false
 
     const releaseOnce = (): void => {
-      // 同一个连接会收到 ws.close / ws.error / socket.close / socket.error 多路事件，
-      // 必须幂等释放，避免重复解绑和重复归还连接池。
       if (released) {
         return
       }
       released = true
-      socket.off('data', onSocketData)
-      socket.off('error', onSocketError)
-      socket.off('close', onSocketClose)
-      this.pool.release(entry)
+      this.upstreams.delete(upstream)
+      void Promise.resolve(upstream.close())
     }
 
-    const onSocketData = (chunk: Buffer) => {
-      // 仅在 ws 可写时转发，避免关闭态发送导致异常。
+    upstream.onMessage((chunk) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(chunk)
       }
-    }
+    })
 
-    const onSocketError = (): void => {
+    upstream.onClose(() => {
       releaseOnce()
       if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
-        ws.close(1011, 'tcp socket error')
+        ws.close(1011, 'upstream closed')
       }
-    }
-
-    const onSocketClose = (): void => {
-      releaseOnce()
-      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
-        ws.close(1011, 'tcp socket closed')
-      }
-    }
-
-    socket.on('data', onSocketData)
-    socket.on('error', onSocketError)
-    socket.on('close', onSocketClose)
+    })
 
     ws.on('message', (message: RawData) => {
-      // 浏览器侧一帧即 PLC 一帧，网关不改写 MBAP/PDU，只做透明转发。
-      socket.write(rawDataToBuffer(message))
+      void Promise.resolve(upstream.send(rawDataToBuffer(message))).catch(() => {
+        releaseOnce()
+        if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+          ws.close(1011, 'upstream send failed')
+        }
+      })
     })
 
     ws.on('close', () => {
