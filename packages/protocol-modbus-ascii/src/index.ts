@@ -3,7 +3,6 @@ import {
   ResponseCode,
   type IResponse,
   RequestMethod,
-  type IRowResponse,
   type BaseReadOptions,
   type BaseWriteOptions,
   type SubscriptionGroup,
@@ -114,14 +113,26 @@ function buildAsciiFrame(unitId: number, pdu: Uint8Array): Uint8Array {
   return new TextEncoder().encode(text)
 }
 
-function getMethodByFnCode(functionCode: number): RequestMethod {
-  if (functionCode >= 1 && functionCode <= 4) {
-    return RequestMethod.READ
-  }
-  if (functionCode >= 5 && functionCode <= 16) {
-    return RequestMethod.WRITE
-  }
-  throw new Error(`Unknown function code: ${functionCode}`)
+function isReadOptions<R extends ReadOptions, W extends WriteOptions>(
+  options: R | W,
+): options is R {
+  return (
+    options.fn === ReadFn.ReadCoils ||
+    options.fn === ReadFn.ReadDiscreteInputs ||
+    options.fn === ReadFn.ReadHoldingRegisters ||
+    options.fn === ReadFn.ReadInputRegisters
+  )
+}
+
+function isWriteOptions<R extends ReadOptions, W extends WriteOptions>(
+  options: R | W,
+): options is W {
+  return (
+    options.fn === WriteFn.WriteSingleCoil ||
+    options.fn === WriteFn.WriteSingleRegister ||
+    options.fn === WriteFn.WriteMultipleCoils ||
+    options.fn === WriteFn.WriteMultipleRegisters
+  )
 }
 
 function parseModbusAsciiResponse(frame: Uint8Array): {
@@ -272,7 +283,10 @@ function encodeWriteMultiRegs(opt: WriteRegistersOptions): Uint8Array {
   return pdu
 }
 
-export class ModbusAsciiPacketFactory implements PacketFactory {
+export class ModbusAsciiPacketFactory<
+  R extends ReadOptions = ReadOptions,
+  W extends WriteOptions = WriteOptions,
+> implements PacketFactory<R, W> {
   readonly isSerial = true
 
   getTransactionId(sequence: number): number
@@ -285,11 +299,11 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
     return sequence & 0xffff
   }
 
-  encodeRead(_transactionId: number, options: ReadOptions): Uint8Array {
+  encodeRead(options: R): Uint8Array {
     return buildAsciiFrame(options.unitId, createReadPdu(options))
   }
 
-  encodeWrite(_transactionId: number, options: WriteOptions): Uint8Array {
+  encodeWrite(options: W): Uint8Array {
     switch (options.fn) {
       case WriteFn.WriteSingleCoil:
         return buildAsciiFrame(options.unitId, encodeWriteSingleCoil(options))
@@ -306,12 +320,12 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
     }
   }
 
-  mergeRead(options: ReadOptions[]): ReadOptions[] {
+  mergeRead(options: R[]): R[] {
     if (!options || options.length === 0) {
       return []
     }
 
-    const grouped = new Map<string, ReadOptions[]>()
+    const grouped = new Map<string, R[]>()
     for (const opt of options) {
       const unitId = opt.unitId ?? 1
       const key = `${unitId}:${opt.fn}`
@@ -320,7 +334,7 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
       grouped.set(key, existing)
     }
 
-    const merged: ReadOptions[] = []
+    const merged: R[] = []
     for (const [, group] of grouped) {
       const sorted = group.sort((a, b) => a.start - b.start)
       let current = { ...sorted[0] }
@@ -344,24 +358,26 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
     return merged
   }
 
-  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[] {
     if (!options || options.length === 0) {
       return []
     }
 
-    const grouped = new Map<string, SubscriptionGroup[]>()
-    for (const opt of options) {
+    const subscriptions = options as unknown as SubscriptionGroup<PacketFactory<R, W>>[]
+
+    const grouped = new Map<string, SubscriptionGroup<PacketFactory<R, W>>[]>()
+    for (const opt of subscriptions) {
       const unitId = opt.unitId ?? 1
-      const key = `${unitId}:${(opt as ReadOptions).fn}`
+      const key = `${unitId}:${(opt as unknown as R).fn}`
       const existing = grouped.get(key) || []
       existing.push(opt)
       grouped.set(key, existing)
     }
 
-    const relations: SubscriptionRelation[] = []
+    const relations: SubscriptionRelation<PacketFactory<R, W>>[] = []
     for (const [, group] of grouped) {
       const sorted = [...group].sort((a, b) => a.start - b.start)
-      let currentRange = { ...sorted[0] } as ReadOptions
+      let currentRange = { ...sorted[0] } as unknown as R
       let currentSubscriptions = [sorted[0]]
 
       for (let i = 1; i < sorted.length; i += 1) {
@@ -373,19 +389,25 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
           currentRange.length = Math.max(currentEnd, nextEnd) - currentRange.start
           currentSubscriptions.push(next)
         } else {
-          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
-          currentRange = { ...next } as ReadOptions
+          relations.push({
+            range: currentRange,
+            subscriptions: currentSubscriptions,
+          } as SubscriptionRelation<PacketFactory<R, W>>)
+          currentRange = { ...next } as unknown as R
           currentSubscriptions = [next]
         }
       }
 
-      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+      relations.push({
+        range: currentRange,
+        subscriptions: currentSubscriptions,
+      } as SubscriptionRelation<PacketFactory<R, W>>)
     }
 
     return relations
   }
 
-  sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {
+  sliceReadResponse(options: R, response: IResponse<R, W>): Uint8Array | null {
     if (response.method !== RequestMethod.READ) {
       throw new Error(`Method mismatch: ${response.method}`)
     }
@@ -435,41 +457,88 @@ export class ModbusAsciiPacketFactory implements PacketFactory {
     return data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(
-    options: ReadOptions | WriteOptions,
-    data: Uint8Array,
-  ): IRowResponse<ReadOptions | WriteOptions> {
+  decodeResponse(options: R | W, data: Uint8Array): IResponse<R, W> {
     const parsed = parseModbusAsciiResponse(data)
-    const method = getMethodByFnCode(options.fn)
+    const endAt = Date.now()
 
     if (parsed.exceptionCode !== null) {
-      return {
-        options,
-        transactionId: 0,
-        method,
-        row: data,
-        code: ModbusExceptionToResponseCode[parsed.exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      if (isReadOptions(options)) {
+        return {
+          options,
+          transactionId: 0,
+          method: RequestMethod.READ,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
+          code: ModbusExceptionToResponseCode[parsed.exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
+        }
+      }
+
+      if (isWriteOptions(options)) {
+        return {
+          options,
+          transactionId: 0,
+          method: RequestMethod.WRITE,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
+          code: ModbusExceptionToResponseCode[parsed.exceptionCode] ?? ResponseCode.OP_NOT_ALLOW,
+        }
+      }
+
+      throw new Error('Unknown function code in exception response')
     }
 
-    if (method === RequestMethod.READ) {
+    if (isReadOptions(options)) {
+      if (parsed.functionCode !== options.fn) {
+        return {
+          options,
+          transactionId: 0,
+          method: RequestMethod.READ,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
+          code: ResponseCode.RESPONSE_INVALID,
+        }
+      }
+
       return {
         options,
         transactionId: 0,
-        method,
-        row: data,
+        method: RequestMethod.READ,
+        responseFrame: data,
+        startAt: options.startAt,
+        endAt,
         code: ResponseCode.SUCCESS,
         data: parsed.data,
         byteCount: parsed.byteCount,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      }
     }
 
-    return {
-      options,
-      transactionId: 0,
-      method,
-      row: data,
-      code: ResponseCode.SUCCESS,
-    } as IRowResponse<ReadOptions | WriteOptions>
+    if (isWriteOptions(options)) {
+      if (parsed.functionCode !== options.fn) {
+        return {
+          options,
+          transactionId: 0,
+          method: RequestMethod.WRITE,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
+          code: ResponseCode.RESPONSE_INVALID,
+        }
+      }
+
+      return {
+        options,
+        transactionId: 0,
+        method: RequestMethod.WRITE,
+        responseFrame: data,
+        startAt: options.startAt,
+        endAt,
+        code: ResponseCode.SUCCESS,
+      }
+    }
+
+    throw new Error('Unknown function code')
   }
 }

@@ -10,15 +10,25 @@ function writeUInt16LE(buffer: Uint8Array, offset: number, value: number): void 
 describe('Mc3ePacketFactory', () => {
   const factory = new Mc3ePacketFactory()
 
-  it('encodes MC 3E read request', () => {
-    const options: ReadWordOptions = {
+  function createReadWordOptions(overrides: Partial<ReadWordOptions> = {}): ReadWordOptions {
+    return {
+      id: 0,
       unitId: 1,
       start: 100,
       length: 2,
       device: 'D',
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
     }
+  }
 
-    const frame = factory.encodeRead(0, options)
+  it('encodes MC 3E read request', () => {
+    const options = createReadWordOptions()
+
+    const frame = factory.encodeRead(options)
 
     expect(frame[0]).toBe(0x00)
     expect(frame[1]).toBe(0x50)
@@ -29,12 +39,7 @@ describe('Mc3ePacketFactory', () => {
   })
 
   it('decodes MC 3E read response', () => {
-    const options: ReadWordOptions = {
-      unitId: 1,
-      start: 100,
-      length: 2,
-      device: 'D',
-    }
+    const options = createReadWordOptions()
 
     const frame = new Uint8Array(15)
     writeUInt16LE(frame, 0, Mc3eSubHeader.RESPONSE)

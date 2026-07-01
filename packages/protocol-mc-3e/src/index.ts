@@ -1,9 +1,7 @@
 import {
   type BaseReadOptions,
   type BaseWriteOptions,
-  type CommonOptions,
   type IResponse,
-  type IRowResponse,
   type PacketFactory,
   type SubscriptionGroup,
   type SubscriptionRelation,
@@ -77,6 +75,12 @@ export interface ReadWordOptions extends BaseReadOptions, Mc3eCommonOptions {}
 
 export type Mc3eReadOptions = ReadBitOptions | ReadWordOptions
 export type Mc3eWriteOptions = WriteBitOptions | WriteWordOptions
+
+function isReadOptions<R extends Mc3eReadOptions, W extends Mc3eWriteOptions>(
+  options: R | W,
+): options is R {
+  return 'length' in options
+}
 
 interface ParsedResponse {
   endCode: number
@@ -336,12 +340,14 @@ function mergeReadOptions(options: Mc3eReadOptions[]): Mc3eReadOptions[] {
   return merged
 }
 
-function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+function mergeSubscriptionRelations<T extends PacketFactory<Mc3eReadOptions, Mc3eWriteOptions>>(
+  options: SubscriptionGroup<T>[],
+): SubscriptionRelation<T>[] {
   if (options.length === 0) {
     return []
   }
 
-  const grouped = new Map<string, SubscriptionGroup[]>()
+  const grouped = new Map<string, SubscriptionGroup<T>[]>()
   for (const option of options) {
     const readOption = option as unknown as Mc3eReadOptions
     const route = readOption.route ?? {}
@@ -361,15 +367,15 @@ function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionR
     }
   }
 
-  const relations: SubscriptionRelation[] = []
+  const relations: SubscriptionRelation<T>[] = []
 
   for (const [, group] of grouped) {
     const sorted = [...group].sort((a, b) => a.start - b.start)
-    let currentRange = { ...sorted[0] } as unknown as Mc3eReadOptions
+    let currentRange = { ...sorted[0] } as unknown as SubscriptionGroup<T>
     let currentSubscriptions = [sorted[0]]
 
     for (let i = 1; i < sorted.length; i += 1) {
-      const next = sorted[i] as unknown as Mc3eReadOptions
+      const next = sorted[i] as unknown as SubscriptionGroup<T>
       const currentEnd = currentRange.start + currentRange.length
       const nextEnd = next.start + next.length
 
@@ -378,7 +384,7 @@ function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionR
         currentSubscriptions.push(sorted[i])
       } else {
         relations.push({ range: currentRange, subscriptions: currentSubscriptions })
-        currentRange = { ...next } as unknown as Mc3eReadOptions
+        currentRange = { ...next }
         currentSubscriptions = [sorted[i]]
       }
     }
@@ -389,7 +395,10 @@ function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionR
   return relations
 }
 
-export class Mc3ePacketFactory implements PacketFactory {
+export class Mc3ePacketFactory<
+  R extends Mc3eReadOptions = Mc3eReadOptions,
+  W extends Mc3eWriteOptions = Mc3eWriteOptions,
+> implements PacketFactory<R, W> {
   readonly isSerial = true
 
   constructor(private readonly options: Mc3ePacketFactoryOptions = {}) {}
@@ -404,7 +413,7 @@ export class Mc3ePacketFactory implements PacketFactory {
     return sequence & 0xffff
   }
 
-  encodeRead(_transactionId: number, options: BaseReadOptions): Uint8Array {
+  encodeRead(options: R): Uint8Array {
     const readOptions = options as Mc3eReadOptions
     const body = buildReadBody(readOptions)
     return buildRequestFrame(body, {
@@ -414,7 +423,7 @@ export class Mc3ePacketFactory implements PacketFactory {
     })
   }
 
-  encodeWrite(_transactionId: number, options: BaseWriteOptions): Uint8Array {
+  encodeWrite(options: W): Uint8Array {
     const writeOptions = options as Mc3eWriteOptions
     const body = buildWriteBody(writeOptions)
     return buildRequestFrame(body, {
@@ -424,20 +433,19 @@ export class Mc3ePacketFactory implements PacketFactory {
     })
   }
 
-  mergeRead(options: BaseReadOptions[]): BaseReadOptions[] {
-    return mergeReadOptions(options as Mc3eReadOptions[])
+  mergeRead(options: R[]): R[] {
+    return mergeReadOptions(options as Mc3eReadOptions[]) as R[]
   }
 
-  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
-    return mergeSubscriptionRelations(options)
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[] {
+    return mergeSubscriptionRelations<PacketFactory<R, W>>(
+      options as unknown as Parameters<typeof mergeSubscriptionRelations<PacketFactory<R, W>>>[0],
+    )
   }
 
-  sliceReadResponse(
-    options: BaseReadOptions,
-    response: IResponse<BaseReadOptions>,
-  ): Uint8Array | null {
+  sliceReadResponse(options: R, response: IResponse<R, W>): Uint8Array | null {
     const req = options as Mc3eReadOptions
-    const rsp = response as IResponse<Mc3eReadOptions>
+    const rsp = response
 
     if (rsp.method !== RequestMethod.READ) {
       throw new Error(`response method mismatch: ${rsp.method}`)
@@ -470,33 +478,35 @@ export class Mc3ePacketFactory implements PacketFactory {
     return rsp.data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(
-    opt: CommonOptions,
-    data: Uint8Array,
-  ): IRowResponse<Mc3eReadOptions | Mc3eWriteOptions> {
-    const requestOptions = opt as Mc3eReadOptions | Mc3eWriteOptions
+  decodeResponse(opt: R | W, data: Uint8Array): IResponse<R, W> {
+    const requestOptions = opt
     const transactionId = 0
+    const endAt = Date.now()
 
     try {
       const parsed = parseResponseFrame(data)
       const code = mapEndCode(parsed.endCode)
 
-      if ('length' in requestOptions) {
+      if (isReadOptions(requestOptions)) {
         if (code !== ResponseCode.SUCCESS) {
           return {
             options: requestOptions,
+            startAt: requestOptions.startAt,
+            endAt,
             transactionId,
             method: RequestMethod.READ,
-            row: data,
+            responseFrame: data,
             code,
           }
         }
 
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId,
           method: RequestMethod.READ,
-          row: data,
+          responseFrame: data,
           code,
           data: parsed.payload,
           byteCount: parsed.payload.length,
@@ -506,36 +516,44 @@ export class Mc3ePacketFactory implements PacketFactory {
       if (code !== ResponseCode.SUCCESS) {
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId,
           method: RequestMethod.WRITE,
-          row: data,
+          responseFrame: data,
           code,
         }
       }
 
       return {
         options: requestOptions,
+        startAt: requestOptions.startAt,
+        endAt,
         transactionId,
         method: RequestMethod.WRITE,
-        row: data,
+        responseFrame: data,
         code,
       }
     } catch {
-      if ('length' in requestOptions) {
+      if (isReadOptions(requestOptions)) {
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId,
           method: RequestMethod.READ,
-          row: data,
+          responseFrame: data,
           code: ResponseCode.RESPONSE_INVALID,
         }
       }
 
       return {
         options: requestOptions,
+        startAt: requestOptions.startAt,
+        endAt,
         transactionId,
         method: RequestMethod.WRITE,
-        row: data,
+        responseFrame: data,
         code: ResponseCode.RESPONSE_INVALID,
       }
     }

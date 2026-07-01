@@ -23,15 +23,25 @@ function toAsciiFrame(payload: Uint8Array): Uint8Array {
 describe('ModbusAsciiPacketFactory', () => {
   const factory = new ModbusAsciiPacketFactory()
 
-  it('encodes ASCII read frame', () => {
-    const options: ReadOptions = {
+  function createReadOptions(overrides: Partial<ReadOptions> = {}): ReadOptions {
+    return {
+      id: 0,
       fn: ReadFn.ReadHoldingRegisters,
       unitId: 1,
       start: 0,
       length: 2,
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
     }
+  }
 
-    const frame = factory.encodeRead(0, options)
+  it('encodes ASCII read frame', () => {
+    const options = createReadOptions()
+
+    const frame = factory.encodeRead(options)
     const text = new TextDecoder().decode(frame)
 
     expect(text.startsWith(':')).toBe(true)
@@ -40,12 +50,7 @@ describe('ModbusAsciiPacketFactory', () => {
   })
 
   it('decodes ASCII read response', () => {
-    const options: ReadOptions = {
-      fn: ReadFn.ReadHoldingRegisters,
-      unitId: 1,
-      start: 0,
-      length: 2,
-    }
+    const options = createReadOptions()
 
     const response = toAsciiFrame(new Uint8Array([0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78]))
     const result = factory.decodeResponse(options, response)

@@ -1,4 +1,5 @@
-import { ResponseCode, type SubscriptionGroup, type SubscriptionRelation } from '@hmi-ts/core'
+import type { PacketFactory, SubscriptionGroup, SubscriptionRelation } from '@hmi-ts/core'
+import { ResponseCode } from '@hmi-ts/core'
 import {
   Mc4eCommand,
   Mc4eDeviceCode,
@@ -287,14 +288,16 @@ export function mergeReadOptions(options: Mc4eReadOptions[]): Mc4eReadOptions[] 
   return merged
 }
 
-export function mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+export function mergeSubscriptionRelations<
+  T extends PacketFactory<Mc4eReadOptions, Mc4eWriteOptions>,
+>(options: SubscriptionGroup<T>[]): SubscriptionRelation<T>[] {
   if (options.length === 0) {
     return []
   }
 
-  const grouped = new Map<string, SubscriptionGroup[]>()
+  const grouped = new Map<string, SubscriptionGroup<T>[]>()
   for (const option of options) {
-    const readOption = option as Mc4eReadOptions
+    const readOption = option as unknown as Mc4eReadOptions
     const route = readOption.route ?? {}
     const key = [
       readOption.device.toUpperCase(),
@@ -312,18 +315,18 @@ export function mergeSubscriptionRelations(options: SubscriptionGroup[]): Subscr
     }
   }
 
-  const relations: SubscriptionRelation[] = []
+  const relations: SubscriptionRelation<T>[] = []
 
   for (const [, group] of grouped) {
     const sorted = [...group].sort((a, b) => a.start - b.start)
-    let currentRange = { ...sorted[0] } as Mc4eReadOptions
+    let currentRange = { ...sorted[0] } as unknown as SubscriptionGroup<T>
     let currentSubscriptions = [sorted[0]]
-    const maxPoints = isBitDevice((currentRange as Mc4eReadOptions).device)
+    const maxPoints = isBitDevice((currentRange as unknown as Mc4eReadOptions).device)
       ? MAX_BIT_POINTS_PER_REQUEST
       : MAX_WORD_POINTS_PER_REQUEST
 
     for (let i = 1; i < sorted.length; i += 1) {
-      const next = sorted[i] as Mc4eReadOptions
+      const next = sorted[i] as unknown as SubscriptionGroup<T>
       const nextEnd = next.start + next.length
       const mergedLength = nextEnd - currentRange.start
 

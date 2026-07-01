@@ -36,16 +36,42 @@ function wrapS7AckData(pduReference: number, parameter: Uint8Array, data: Uint8A
 describe('SiemensS7PacketFactory', () => {
   const factory = new SiemensS7PacketFactory()
 
-  it('encodes S7 ReadVar request', () => {
-    const options: ReadOptions = {
+  function createReadOptions(overrides: Partial<ReadOptions> = {}): ReadOptions {
+    return {
+      id: 0x1234,
       unitId: 1,
       area: S7Area.DB,
       dbNumber: 1,
       start: 10,
       length: 4,
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
     }
+  }
 
-    const frame = factory.encodeRead(0x1234, options)
+  function createWriteOptions(overrides: Partial<WriteOptions> = {}): WriteOptions {
+    return {
+      id: 0x66,
+      unitId: 1,
+      area: S7Area.DB,
+      dbNumber: 1,
+      start: 0,
+      value: [0x12, 0x34],
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
+    }
+  }
+
+  it('encodes S7 ReadVar request', () => {
+    const options = createReadOptions()
+
+    const frame = factory.encodeRead(options)
 
     expect(frame[0]).toBe(0x03)
     expect(frame[1]).toBe(0x00)
@@ -59,13 +85,7 @@ describe('SiemensS7PacketFactory', () => {
   })
 
   it('decodes S7 ReadVar response', () => {
-    const options: ReadOptions = {
-      unitId: 1,
-      area: S7Area.DB,
-      dbNumber: 1,
-      start: 0,
-      length: 2,
-    }
+    const options = createReadOptions({ start: 0, length: 2 })
 
     const parameter = new Uint8Array([0x04, 0x01])
     const data = new Uint8Array([0xff, 0x04, 0x00, 0x10, 0x12, 0x34])
@@ -83,15 +103,9 @@ describe('SiemensS7PacketFactory', () => {
   })
 
   it('encodes and decodes S7 WriteVar path', () => {
-    const options: WriteOptions = {
-      unitId: 1,
-      area: S7Area.DB,
-      dbNumber: 1,
-      start: 0,
-      value: [0x12, 0x34],
-    }
+    const options = createWriteOptions()
 
-    const request = factory.encodeWrite(0x66, options)
+    const request = factory.encodeWrite(options)
     expect(request[17]).toBe(0x05)
     expect(request[18]).toBe(0x01)
 

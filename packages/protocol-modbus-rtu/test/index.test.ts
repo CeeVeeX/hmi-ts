@@ -5,15 +5,25 @@ import { ModbusRtuPacketFactory, ReadFn, wrapRtuFrame, type ReadOptions } from '
 describe('ModbusRtuPacketFactory', () => {
   const factory = new ModbusRtuPacketFactory()
 
-  it('encodes RTU read frame with CRC', () => {
-    const options: ReadOptions = {
+  function createReadOptions(overrides: Partial<ReadOptions> = {}): ReadOptions {
+    return {
+      id: 0,
       fn: ReadFn.ReadHoldingRegisters,
       unitId: 1,
       start: 0,
       length: 2,
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
     }
+  }
 
-    const frame = factory.encodeRead(0, options)
+  it('encodes RTU read frame with CRC', () => {
+    const options = createReadOptions()
+
+    const frame = factory.encodeRead(options)
 
     expect(frame[0]).toBe(0x01)
     expect(frame[1]).toBe(0x03)
@@ -25,12 +35,7 @@ describe('ModbusRtuPacketFactory', () => {
   })
 
   it('decodes RTU read response', () => {
-    const options: ReadOptions = {
-      fn: ReadFn.ReadHoldingRegisters,
-      unitId: 1,
-      start: 0,
-      length: 2,
-    }
+    const options = createReadOptions()
 
     const response = wrapRtuFrame(new Uint8Array([0x03, 0x04, 0x12, 0x34, 0x56, 0x78]), 1)
     const result = factory.decodeResponse(options, response)

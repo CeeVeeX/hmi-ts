@@ -63,6 +63,11 @@ export class UdpTransport extends EventEmitter<TransportEvent> implements Transp
   private closeCallbacks: CloseCallback[] = []
   private connectCallbacks: ConnectCallback[] = []
 
+  get address(): string {
+    const { host, port } = this.options
+    return `${host}:${port}`
+  }
+
   constructor(private readonly options: UdpTransportOptions) {
     super()
   }
@@ -75,6 +80,7 @@ export class UdpTransport extends EventEmitter<TransportEvent> implements Transp
     const socket = dgram.createSocket('udp4')
     socket.on('message', (msg) => {
       const data = new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength)
+      this.emit('message', data)
       this.dataCallbacks.forEach((cb) => cb(data))
     })
     socket.on('error', (err) => this.emitClose(new TransportError(err.message)))
@@ -92,6 +98,7 @@ export class UdpTransport extends EventEmitter<TransportEvent> implements Transp
     })
 
     this.socket = socket
+    this.emit('connected')
     this.connectCallbacks.forEach((cb) => cb())
   }
 
@@ -110,6 +117,7 @@ export class UdpTransport extends EventEmitter<TransportEvent> implements Transp
 
   async destroy(): Promise<void> {
     await this.close()
+    this.emit('destroyed', new ConnectionClosedError())
   }
 
   async send(data: Uint8Array): Promise<void> {
@@ -142,6 +150,9 @@ export class UdpTransport extends EventEmitter<TransportEvent> implements Transp
   }
 
   private emitClose(err?: Error): void {
+    const finalError = err ?? new ConnectionClosedError()
+    this.emit('error', finalError)
+    this.emit('disconnected', finalError)
     this.closeCallbacks.forEach((cb) => cb(err))
   }
 }

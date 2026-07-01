@@ -1,11 +1,6 @@
 import {
-  type BaseReadOptions,
-  type BaseWriteOptions,
-  type CommonOptions,
   type IResponse,
-  type IRowResponse,
   type PacketFactory,
-  type SubscriptionGroup,
   type SubscriptionRelation,
   RequestMethod,
   ResponseCode,
@@ -23,15 +18,18 @@ import {
   readUInt16LE,
   unpackBitValues,
 } from './helpers'
-import type {
-  Mc4ePacketFactoryOptions,
-  Mc4eReadOptions,
-  Mc4eWriteOptions,
-  ReadBitOptions,
-  ReadWordOptions,
-} from './types'
+import type { Mc4ePacketFactoryOptions, Mc4eReadOptions, Mc4eWriteOptions } from './types'
 
-export class Mc4ePacketFactory implements PacketFactory {
+function isReadOptions<R extends Mc4eReadOptions, W extends Mc4eWriteOptions>(
+  options: R | W,
+): options is R {
+  return 'length' in options
+}
+
+export class Mc4ePacketFactory<
+  R extends Mc4eReadOptions = Mc4eReadOptions,
+  W extends Mc4eWriteOptions = Mc4eWriteOptions,
+> implements PacketFactory<R, W> {
   constructor(private readonly options: Mc4ePacketFactoryOptions = {}) {}
 
   getTransactionId(sequence: number): number
@@ -47,7 +45,7 @@ export class Mc4ePacketFactory implements PacketFactory {
     return sequence & 0xffff
   }
 
-  encodeRead(options: BaseReadOptions): Uint8Array {
+  encodeRead(options: R): Uint8Array {
     const readOptions = options as Mc4eReadOptions
     const body = buildReadBody(readOptions)
     return buildRequestFrame(options.id, body, {
@@ -57,7 +55,7 @@ export class Mc4ePacketFactory implements PacketFactory {
     })
   }
 
-  encodeWrite(options: BaseWriteOptions): Uint8Array {
+  encodeWrite(options: W): Uint8Array {
     const writeOptions = options as Mc4eWriteOptions
     const body = buildWriteBody(writeOptions)
     return buildRequestFrame(options.id, body, {
@@ -67,18 +65,20 @@ export class Mc4ePacketFactory implements PacketFactory {
     })
   }
 
-  mergeRead(options: BaseReadOptions[]): BaseReadOptions[] {
-    return mergeReadOptions(options as Mc4eReadOptions[])
+  mergeRead(options: R[]): R[] {
+    return mergeReadOptions(options as Mc4eReadOptions[]) as R[]
   }
 
-  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
-    return mergeSubscriptionRelations(options)
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[] {
+    return mergeSubscriptionRelations<PacketFactory<R, W>>(
+      options as unknown as Parameters<typeof mergeSubscriptionRelations<PacketFactory<R, W>>>[0],
+    )
   }
 
   sliceReadResponse(
-    options: BaseReadOptions,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response: IResponse<Mc4eReadOptions, any>,
+    options: R,
+
+    response: IResponse<R, W>,
   ): Uint8Array | null {
     const req = options as Mc4eReadOptions
     const rsp = response
@@ -114,20 +114,20 @@ export class Mc4ePacketFactory implements PacketFactory {
     return rsp.data.slice(startIndex, endIndex)
   }
 
-  decodeResponse(
-    opt: Mc4eReadOptions | Mc4eWriteOptions,
-    data: Uint8Array,
-  ): IRowResponse<Mc4eReadOptions, Mc4eWriteOptions> {
+  decodeResponse(opt: R | W, data: Uint8Array): IResponse<R, W> {
     const requestOptions = opt
+    const endAt = Date.now()
 
     try {
       const parsed = parseResponseFrame(data)
       const code = mapEndCode(parsed.endCode)
 
-      if ('length' in requestOptions) {
+      if (isReadOptions(requestOptions)) {
         if (code !== ResponseCode.SUCCESS) {
           return {
             options: requestOptions,
+            startAt: requestOptions.startAt,
+            endAt,
             transactionId: parsed.transactionId,
             method: RequestMethod.READ,
             responseFrame: data,
@@ -137,6 +137,8 @@ export class Mc4ePacketFactory implements PacketFactory {
 
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId: parsed.transactionId,
           method: RequestMethod.READ,
           responseFrame: data,
@@ -149,6 +151,8 @@ export class Mc4ePacketFactory implements PacketFactory {
       if (code !== ResponseCode.SUCCESS) {
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId: parsed.transactionId,
           method: RequestMethod.WRITE,
           responseFrame: data,
@@ -158,15 +162,19 @@ export class Mc4ePacketFactory implements PacketFactory {
 
       return {
         options: requestOptions,
+        startAt: requestOptions.startAt,
+        endAt,
         transactionId: parsed.transactionId,
         method: RequestMethod.WRITE,
         responseFrame: data,
         code,
       }
     } catch {
-      if ('length' in requestOptions) {
+      if (isReadOptions(requestOptions)) {
         return {
           options: requestOptions,
+          startAt: requestOptions.startAt,
+          endAt,
           transactionId: this.getTransactionId(data),
           method: RequestMethod.READ,
           responseFrame: data,
@@ -176,6 +184,8 @@ export class Mc4ePacketFactory implements PacketFactory {
 
       return {
         options: requestOptions,
+        startAt: requestOptions.startAt,
+        endAt,
         transactionId: this.getTransactionId(data),
         method: RequestMethod.WRITE,
         responseFrame: data,

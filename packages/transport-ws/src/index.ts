@@ -65,6 +65,10 @@ export class WsTransport extends EventEmitter<TransportEvent> implements Transpo
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private manualClose = false
 
+  get address(): string {
+    return this.options.url
+  }
+
   constructor(private readonly options: WsTransportOptions) {
     super()
     this.reconnectDelay = options.reconnectDelayMs ?? 300
@@ -100,6 +104,7 @@ export class WsTransport extends EventEmitter<TransportEvent> implements Transpo
 
   async destroy(): Promise<void> {
     await this.close()
+    this.emit('destroyed', new ConnectionClosedError())
   }
 
   async send(data: Uint8Array): Promise<void> {
@@ -157,6 +162,7 @@ export class WsTransport extends EventEmitter<TransportEvent> implements Transpo
 
     this.ws = ws
     this.reconnectDelay = this.options.reconnectDelayMs ?? 300
+    this.emit('connected')
     this.connectCallbacks.forEach((cb) => cb())
   }
 
@@ -181,6 +187,7 @@ export class WsTransport extends EventEmitter<TransportEvent> implements Transpo
 
       const frame = this.receiveBuffer.slice(0, frameLength)
       this.receiveBuffer = this.receiveBuffer.slice(frameLength)
+      this.emit('message', frame)
       this.dataCallbacks.forEach((cb) => cb(frame))
     }
   }
@@ -203,6 +210,9 @@ export class WsTransport extends EventEmitter<TransportEvent> implements Transpo
   }
 
   private emitClose(err?: Error): void {
+    const finalError = err ?? new ConnectionClosedError()
+    this.emit('error', finalError)
+    this.emit('disconnected', finalError)
     this.closeCallbacks.forEach((cb) => cb(err))
   }
 }

@@ -19,15 +19,55 @@ function writeUInt16LE(buffer: Uint8Array, offset: number, value: number): void 
 describe('Mc4ePacketFactory', () => {
   const factory = new Mc4ePacketFactory()
 
-  it('encodes read request frame for D words', () => {
-    const opt: ReadWordOptions = {
+  function createReadWordOptions(overrides: Partial<ReadWordOptions> = {}): ReadWordOptions {
+    return {
+      id: 0x1234,
       unitId: 1,
       start: 100,
       length: 3,
       device: 'D',
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
     }
+  }
 
-    const frame = factory.encodeRead(0x1234, opt)
+  function createReadBitOptions(overrides: Partial<ReadBitOptions> = {}): ReadBitOptions {
+    return {
+      id: 0x1234,
+      unitId: 1,
+      start: 0,
+      length: 10,
+      device: 'M',
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
+    }
+  }
+
+  function createWriteWordOptions(overrides: Partial<WriteWordOptions> = {}): WriteWordOptions {
+    return {
+      id: 0x0021,
+      unitId: 1,
+      start: 200,
+      value: [0x1234, 0x5678],
+      device: 'D',
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
+    }
+  }
+
+  it('encodes read request frame for D words', () => {
+    const opt = createReadWordOptions()
+
+    const frame = factory.encodeRead(opt)
 
     expect(frame[0]).toBe(0x54)
     expect(frame[1]).toBe(0x00)
@@ -43,14 +83,9 @@ describe('Mc4ePacketFactory', () => {
   })
 
   it('encodes write request frame for D words', () => {
-    const opt: WriteWordOptions = {
-      unitId: 1,
-      start: 200,
-      value: [0x1234, 0x5678],
-      device: 'D',
-    }
+    const opt = createWriteWordOptions()
 
-    const frame = factory.encodeWrite(0x0021, opt)
+    const frame = factory.encodeWrite(opt)
 
     expect(frame[0]).toBe(0x54)
     expect(frame[2]).toBe(0x21)
@@ -65,12 +100,7 @@ describe('Mc4ePacketFactory', () => {
   })
 
   it('decodes read success response', () => {
-    const opt: ReadWordOptions = {
-      unitId: 1,
-      start: 100,
-      length: 2,
-      device: 'D',
-    }
+    const opt = createReadWordOptions({ length: 2 })
 
     const frame = new Uint8Array(19)
     writeUInt16LE(frame, 0, Mc4eSubHeader.RESPONSE)
@@ -97,12 +127,7 @@ describe('Mc4ePacketFactory', () => {
   })
 
   it('maps non-zero end code to error response', () => {
-    const opt: ReadWordOptions = {
-      unitId: 1,
-      start: 0,
-      length: 1,
-      device: 'D',
-    }
+    const opt = createReadWordOptions({ start: 0, length: 1 })
 
     const frame = new Uint8Array(15)
     writeUInt16LE(frame, 0, Mc4eSubHeader.RESPONSE)
@@ -120,9 +145,9 @@ describe('Mc4ePacketFactory', () => {
 
   it('mergeRead should aggressively merge same device ranges within point limit', () => {
     const reqs: ReadWordOptions[] = [
-      { unitId: 1, device: 'D', start: 0, length: 1 },
-      { unitId: 1, device: 'D', start: 100, length: 2 },
-      { unitId: 1, device: 'D', start: 300, length: 5 },
+      createReadWordOptions({ start: 0, length: 1 }),
+      createReadWordOptions({ start: 100, length: 2 }),
+      createReadWordOptions({ start: 300, length: 5 }),
     ]
 
     const merged = factory.mergeRead(reqs) as ReadWordOptions[]
@@ -132,8 +157,8 @@ describe('Mc4ePacketFactory', () => {
 
   it('mergeRead should split when word point limit is exceeded', () => {
     const reqs: ReadWordOptions[] = [
-      { unitId: 1, device: 'D', start: 0, length: 100 },
-      { unitId: 1, device: 'D', start: 950, length: 20 },
+      createReadWordOptions({ start: 0, length: 100 }),
+      createReadWordOptions({ start: 950, length: 20 }),
     ]
 
     const merged = factory.mergeRead(reqs) as ReadWordOptions[]
@@ -144,8 +169,8 @@ describe('Mc4ePacketFactory', () => {
 
   it('mergeRead should keep bit and word device groups separated', () => {
     const reqs: Array<ReadWordOptions | ReadBitOptions> = [
-      { unitId: 1, device: 'D', start: 0, length: 10 },
-      { unitId: 1, device: 'M', start: 0, length: 10 },
+      createReadWordOptions({ start: 0, length: 10 }),
+      createReadBitOptions({ start: 0, length: 10 }),
     ]
 
     const merged = factory.mergeRead(reqs)

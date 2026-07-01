@@ -2,7 +2,6 @@ import {
   type BaseReadOptions,
   type BaseWriteOptions,
   type IResponse,
-  type IRowResponse,
   type PacketFactory,
   RequestMethod,
   ResponseCode,
@@ -40,6 +39,12 @@ export interface S7WriteOptions extends BaseWriteOptions {
 
 export type ReadOptions = S7ReadOptions
 export type WriteOptions = S7WriteOptions
+
+function isReadOptions<R extends ReadOptions, W extends WriteOptions>(
+  options: R | W,
+): options is R {
+  return 'length' in options
+}
 
 interface ParsedS7Frame {
   rosctr: number
@@ -212,7 +217,10 @@ function encodeWriteVarRequest(transactionId: number, options: WriteOptions): Ui
   return buildS7Frame(ROSCTR_JOB, transactionId, parameter, data)
 }
 
-export class SiemensS7PacketFactory implements PacketFactory {
+export class SiemensS7PacketFactory<
+  R extends ReadOptions = ReadOptions,
+  W extends WriteOptions = WriteOptions,
+> implements PacketFactory<R, W> {
   getTransactionId(sequence: number): number
   getTransactionId(response: Uint8Array): number
   getTransactionId(sequence: number | Uint8Array): number {
@@ -223,20 +231,20 @@ export class SiemensS7PacketFactory implements PacketFactory {
     return sequence & 0xffff
   }
 
-  encodeRead(transactionId: number, options: ReadOptions): Uint8Array {
-    return encodeReadVarRequest(transactionId, options)
+  encodeRead(options: R): Uint8Array {
+    return encodeReadVarRequest(options.id, options)
   }
 
-  encodeWrite(transactionId: number, options: WriteOptions): Uint8Array {
-    return encodeWriteVarRequest(transactionId, options)
+  encodeWrite(options: W): Uint8Array {
+    return encodeWriteVarRequest(options.id, options)
   }
 
-  mergeRead(options: ReadOptions[]): ReadOptions[] {
+  mergeRead(options: R[]): R[] {
     if (options.length === 0) {
       return []
     }
 
-    const grouped = new Map<string, ReadOptions[]>()
+    const grouped = new Map<string, R[]>()
     for (const option of options) {
       const key = `${option.unitId}:${option.area}:${option.dbNumber ?? 0}`
       const group = grouped.get(key) ?? []
@@ -244,7 +252,7 @@ export class SiemensS7PacketFactory implements PacketFactory {
       grouped.set(key, group)
     }
 
-    const merged: ReadOptions[] = []
+    const merged: R[] = []
 
     for (const [, group] of grouped) {
       const sorted = [...group].sort((a, b) => a.start - b.start)
@@ -270,24 +278,27 @@ export class SiemensS7PacketFactory implements PacketFactory {
     return merged
   }
 
-  mergeSubscriptionRelations(options: SubscriptionGroup[]): SubscriptionRelation[] {
+  mergeSubscriptionRelations(options: R[]): SubscriptionRelation<PacketFactory<R, W>>[] {
     if (options.length === 0) {
       return []
     }
 
-    const grouped = new Map<string, SubscriptionGroup[]>()
-    for (const option of options) {
-      const key = `${option.unitId}:${option.area}:${option.dbNumber ?? 0}`
+    const subscriptions = options as unknown as SubscriptionGroup<PacketFactory<R, W>>[]
+
+    const grouped = new Map<string, SubscriptionGroup<PacketFactory<R, W>>[]>()
+    for (const option of subscriptions) {
+      const typedOption = option as unknown as R
+      const key = `${typedOption.unitId}:${typedOption.area}:${typedOption.dbNumber ?? 0}`
       const group = grouped.get(key) ?? []
       group.push(option)
       grouped.set(key, group)
     }
 
-    const relations: SubscriptionRelation[] = []
+    const relations: SubscriptionRelation<PacketFactory<R, W>>[] = []
 
     for (const [, group] of grouped) {
       const sorted = [...group].sort((a, b) => a.start - b.start)
-      let currentRange = { ...sorted[0] } as ReadOptions
+      let currentRange = { ...sorted[0] } as unknown as R
       let currentSubscriptions = [sorted[0]]
 
       for (let i = 1; i < sorted.length; i += 1) {
@@ -300,19 +311,25 @@ export class SiemensS7PacketFactory implements PacketFactory {
           currentRange.length = mergedLength
           currentSubscriptions.push(next)
         } else {
-          relations.push({ range: currentRange, subscriptions: currentSubscriptions })
-          currentRange = { ...next } as ReadOptions
+          relations.push({
+            range: currentRange,
+            subscriptions: currentSubscriptions,
+          } as SubscriptionRelation<PacketFactory<R, W>>)
+          currentRange = { ...next } as unknown as R
           currentSubscriptions = [next]
         }
       }
 
-      relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+      relations.push({
+        range: currentRange,
+        subscriptions: currentSubscriptions,
+      } as SubscriptionRelation<PacketFactory<R, W>>)
     }
 
     return relations
   }
 
-  sliceReadResponse(options: ReadOptions, response: IResponse<ReadOptions>): Uint8Array | null {
+  sliceReadResponse(options: R, response: IResponse<R, W>): Uint8Array | null {
     if (response.method !== RequestMethod.READ) {
       throw new Error(`response method mismatch: ${response.method}`)
     }
@@ -331,47 +348,60 @@ export class SiemensS7PacketFactory implements PacketFactory {
     return response.data.slice(offset, end)
   }
 
-  decodeResponse(
-    options: ReadOptions | WriteOptions,
-    data: Uint8Array,
-  ): IRowResponse<ReadOptions | WriteOptions> {
+  decodeResponse(options: R | W, data: Uint8Array): IResponse<R, W> {
+    const endAt = Date.now()
     try {
       const parsed = parseS7Frame(data)
-      const method = 'length' in options ? RequestMethod.READ : RequestMethod.WRITE
 
       if (parsed.rosctr !== ROSCTR_ACK_DATA) {
+        if (isReadOptions(options)) {
+          return {
+            options,
+            transactionId: parsed.pduReference,
+            method: RequestMethod.READ,
+            responseFrame: data,
+            startAt: options.startAt,
+            endAt,
+            code: ResponseCode.RESPONSE_INVALID,
+          }
+        }
+
         return {
           options,
           transactionId: parsed.pduReference,
-          method,
-          row: data,
+          method: RequestMethod.WRITE,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
           code: ResponseCode.RESPONSE_INVALID,
-        } as IRowResponse<ReadOptions | WriteOptions>
+        }
       }
 
-      if (method === RequestMethod.READ) {
-        const readOptions = options as ReadOptions
-
+      if (isReadOptions(options)) {
         if (parsed.parameter[0] !== FUNCTION_READ_VAR || parsed.data.length < 4) {
           return {
-            options: readOptions,
+            options,
             transactionId: parsed.pduReference,
-            method,
-            row: data,
+            method: RequestMethod.READ,
+            responseFrame: data,
+            startAt: options.startAt,
+            endAt,
             code: ResponseCode.RESPONSE_INVALID,
-          } as IRowResponse<ReadOptions | WriteOptions>
+          }
         }
 
         const itemCode = parsed.data[0]
         const mapped = mapItemReturnCode(itemCode)
         if (mapped !== ResponseCode.SUCCESS) {
           return {
-            options: readOptions,
+            options,
             transactionId: parsed.pduReference,
-            method,
-            row: data,
+            method: RequestMethod.READ,
+            responseFrame: data,
+            startAt: options.startAt,
+            endAt,
             code: mapped,
-          } as IRowResponse<ReadOptions | WriteOptions>
+          }
         }
 
         const bitLength = readUInt16BE(parsed.data, 2)
@@ -380,54 +410,73 @@ export class SiemensS7PacketFactory implements PacketFactory {
 
         if (payload.length !== byteCount) {
           return {
-            options: readOptions,
+            options,
             transactionId: parsed.pduReference,
-            method,
-            row: data,
+            method: RequestMethod.READ,
+            responseFrame: data,
+            startAt: options.startAt,
+            endAt,
             code: ResponseCode.RESPONSE_INVALID,
-          } as IRowResponse<ReadOptions | WriteOptions>
+          }
         }
 
         return {
-          options: readOptions,
+          options,
           transactionId: parsed.pduReference,
-          method,
-          row: data,
+          method: RequestMethod.READ,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
           code: ResponseCode.SUCCESS,
           data: payload,
           byteCount: payload.length,
-        } as IRowResponse<ReadOptions | WriteOptions>
+        }
       }
-
-      const writeOptions = options as WriteOptions
 
       if (parsed.parameter[0] !== FUNCTION_WRITE_VAR || parsed.data.length < 1) {
         return {
-          options: writeOptions,
+          options,
           transactionId: parsed.pduReference,
-          method,
-          row: data,
+          method: RequestMethod.WRITE,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
           code: ResponseCode.RESPONSE_INVALID,
-        } as IRowResponse<ReadOptions | WriteOptions>
+        }
       }
 
       const code = mapItemReturnCode(parsed.data[0])
       return {
-        options: writeOptions,
+        options,
         transactionId: parsed.pduReference,
-        method,
-        row: data,
+        method: RequestMethod.WRITE,
+        responseFrame: data,
+        startAt: options.startAt,
+        endAt,
         code,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      }
     } catch {
-      const method = 'length' in options ? RequestMethod.READ : RequestMethod.WRITE
+      if (isReadOptions(options)) {
+        return {
+          options,
+          transactionId: this.getTransactionId(data),
+          method: RequestMethod.READ,
+          responseFrame: data,
+          startAt: options.startAt,
+          endAt,
+          code: ResponseCode.RESPONSE_INVALID,
+        }
+      }
+
       return {
         options,
-        transactionId: 0,
-        method,
-        row: data,
+        transactionId: this.getTransactionId(data),
+        method: RequestMethod.WRITE,
+        responseFrame: data,
+        startAt: options.startAt,
+        endAt,
         code: ResponseCode.RESPONSE_INVALID,
-      } as IRowResponse<ReadOptions | WriteOptions>
+      }
     }
   }
 }
