@@ -1,56 +1,129 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { HmiButton } from '@hmi-ts/vue-components'
 
-const count = ref(0)
+const button = ref<HTMLButtonElement>()
 
-function increment() {
-  count.value++
+function useButton(btn: HTMLElement) {
+  console.log('Button element:', btn)
+
+  btn.addEventListener('contextmenu', (e) => e.preventDefault())
+  btn.addEventListener('selectstart', (e) => e.preventDefault())
+
+  // 配置参数，按需调整
+  const CONFIG = {
+    moveTolerance: 30, // 滑动容忍像素，小于此距离不算滑出取消
+    cancelBufferMs: 120, // 断触缓冲延时，瞬时断触不立即取消
+  }
+
+  // 状态变量
+  let state = {
+    isPressing: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    bufferTimer: null,
+  }
+
+  // 清除缓冲定时器
+  function clearBufferTimer() {
+    if (state.bufferTimer) {
+      clearTimeout(state.bufferTimer)
+      state.bufferTimer = null
+    }
+  }
+
+  // 统一结束按压（抬起/最终取消）
+  function endPress() {
+    clearBufferTimer()
+    if (!state.isPressing) return
+
+    state.isPressing = false
+    state.pointerId = null
+    btn.classList.remove('pressing')
+    console.log('按压结束')
+  }
+
+  // 按下
+  btn.addEventListener('pointerdown', (e) => {
+    // 只响应左键/单指触摸
+    if (e.button !== 0 || state.isPressing) return
+    e.preventDefault()
+    clearBufferTimer()
+
+    state.isPressing = true
+    state.pointerId = e.pointerId
+    state.startX = e.clientX
+    state.startY = e.clientY
+
+    // 捕获指针
+    try {
+      btn.setPointerCapture(e.pointerId)
+    } catch (err) {}
+
+    btn.classList.add('pressing')
+    console.log('按下开始')
+  })
+
+  // 滑动判断偏移
+  btn.addEventListener('pointermove', (e) => {
+    if (!state.isPressing || e.pointerId !== state.pointerId) return
+
+    // 计算滑动距离
+    const dx = e.clientX - state.startX
+    const dy = e.clientY - state.startY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // 滑动超过容忍值，准备缓冲取消
+    if (dist > CONFIG.moveTolerance) {
+      clearBufferTimer()
+      state.bufferTimer = setTimeout(() => {
+        endPress()
+        console.log('滑动超出阈值，取消按压')
+      }, CONFIG.cancelBufferMs)
+    } else {
+      // 小幅滑动，清除取消缓冲，保持按压
+      clearBufferTimer()
+    }
+  })
+
+  // 正常抬起
+  btn.addEventListener('pointerup', (e) => {
+    if (!state.isPressing || e.pointerId !== state.pointerId) return
+    try {
+      btn.releasePointerCapture(e.pointerId)
+    } catch (err) {}
+    endPress()
+    console.log('正常抬起')
+  })
+
+  // 操作取消（断触、滑出、滚动、多指触发）
+  btn.addEventListener('pointercancel', (e) => {
+    if (!state.isPressing || e.pointerId !== state.pointerId) return
+    // 不立刻结束，走缓冲延时，过滤瞬时断触
+    clearBufferTimer()
+    state.bufferTimer = setTimeout(() => {
+      endPress()
+      console.log('缓冲后判定取消（断触/滑出）')
+    }, CONFIG.cancelBufferMs)
+  })
+
+  // 全局兜底：防止指针丢失，页面任意位置松开都重置
+  document.addEventListener('pointerup', () => {
+    if (state.isPressing) endPress()
+  })
 }
 
-function decrement() {
-  count.value--
-}
-
-function reset() {
-  count.value = 0
-}
+onMounted(() => {
+  if (button.value) {
+    useButton(button.value)
+  }
+})
 </script>
 
 <template>
   <div class="app">
-    <header>
-      <h1>HMI-TS Vue Example</h1>
-      <p>欢迎使用 HMI-TS 工具集</p>
-    </header>
-
-    <main>
-      <section class="counter">
-        <h2>计数器示例</h2>
-        <p>
-          当前计数: <strong>{{ count }}</strong>
-        </p>
-        <div class="buttons">
-          <HmiButton @click="increment">增加</HmiButton>
-          <HmiButton variant="ghost" @click="decrement">减少</HmiButton>
-          <HmiButton variant="ghost" @click="reset">重置</HmiButton>
-        </div>
-      </section>
-
-      <section class="info">
-        <h2>关于项目</h2>
-        <ul>
-          <li>🔧 基于 Vue 3 + TypeScript</li>
-          <li>⚡ 使用 Vite 构建工具</li>
-          <li>📦 适用于 Web HMI 的工具集</li>
-          <li>🚀 高性能和开发体验</li>
-        </ul>
-      </section>
-    </main>
-
-    <footer>
-      <p>© 2024 HMI-TS. MIT License</p>
-    </footer>
+    <button ref="button">Increment</button>
   </div>
 </template>
 
