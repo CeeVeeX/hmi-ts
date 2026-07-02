@@ -66,6 +66,11 @@ export interface AsciiStringDecodeOptions {
   trimTrailingNull?: boolean
 }
 
+/**
+ * 位顺序类型，用于指定位的排列顺序。
+ * - 'lsb'：最低有效位在前（默认）。
+ * - 'msb'：最高有效位在前。
+ */
 export type BitOrder = 'lsb' | 'msb'
 
 function ensureByte(value: number, field: string): void {
@@ -148,6 +153,13 @@ export function decodeBoolean(bytes: Uint8Array): boolean {
 }
 
 /**
+ * 将布尔值编码为单字节（0x00/0x01）。
+ */
+export function encodeBoolean(value: boolean): Uint8Array {
+  return Uint8Array.of(value ? 1 : 0)
+}
+
+/**
  * Uint8Array 转位数组。
  */
 export function decodeBits(
@@ -155,6 +167,30 @@ export function decodeBits(
   maxBits?: number,
   order: BitOrder = 'lsb',
 ): (0 | 1)[] {
+  if (maxBits !== undefined && (!Number.isInteger(maxBits) || maxBits < 0)) {
+    throw new RangeError('maxBits must be a non-negative integer')
+  }
+
+  if (maxBits !== undefined) {
+    const limited: (0 | 1)[] = []
+    if (order === 'lsb') {
+      for (let bitPos = 0; bitPos < maxBits; bitPos += 1) {
+        const byteIndex = Math.floor(bitPos / 8)
+        const bitIndex = bitPos % 8
+        const byte = byteIndex < bytes.length ? bytes[byteIndex] : 0
+        limited.push(((byte >> bitIndex) & 1) as 0 | 1)
+      }
+    } else {
+      for (let bitPos = maxBits - 1; bitPos >= 0; bitPos -= 1) {
+        const byteIndex = Math.floor(bitPos / 8)
+        const bitIndex = bitPos % 8
+        const byte = byteIndex < bytes.length ? bytes[byteIndex] : 0
+        limited.push(((byte >> bitIndex) & 1) as 0 | 1)
+      }
+    }
+    return limited
+  }
+
   const bits: (0 | 1)[] = []
 
   for (const byte of bytes) {
@@ -168,29 +204,58 @@ export function decodeBits(
       }
     }
   }
-
-  return maxBits !== undefined ? bits.slice(0, maxBits) : bits
+  return bits
 }
 
 /**
  * 位列表编码为 Uint8Array（每个元素为 0/1）。
  */
-export function encodeBits(value: boolean[] | number[]): Uint8Array {
+export function encodeBits(
+  value: boolean[] | number[],
+  order: BitOrder = 'lsb',
+  bitWidth?: number,
+): Uint8Array {
   if (!Array.isArray(value)) {
     throw new TypeError('value must be an array')
   }
 
-  return Uint8Array.from(
-    value.map((item, index) => {
-      if (typeof item === 'boolean') {
-        return item ? 1 : 0
-      }
-      if (typeof item === 'number' && Number.isInteger(item) && (item === 0 || item === 1)) {
-        return item
-      }
-      throw new RangeError(`bit value at index ${index} must be boolean or 0/1`)
-    }),
-  )
+  const bits = value.map((item, index) => {
+    if (typeof item === 'boolean') {
+      return (item ? 1 : 0) as 0 | 1
+    }
+    if (typeof item === 'number' && Number.isInteger(item) && (item === 0 || item === 1)) {
+      return item as 0 | 1
+    }
+    throw new RangeError(`bit value at index ${index} must be boolean or 0/1`)
+  })
+
+  if (bitWidth !== undefined && (!Number.isInteger(bitWidth) || bitWidth < 0)) {
+    throw new RangeError('bitWidth must be a non-negative integer')
+  }
+
+  const width = bitWidth ?? bits.length
+  if (bits.length > width) {
+    throw new RangeError('bitWidth must be greater than or equal to value length')
+  }
+
+  const out = new Uint8Array(Math.ceil(width / 8))
+  for (let i = 0; i < bits.length; i += 1) {
+    let bitPos: number
+    if (order === 'lsb') {
+      bitPos = i
+    } else if (bitWidth === undefined) {
+      bitPos = Math.floor(i / 8) * 8 + (7 - (i % 8))
+    } else {
+      bitPos = width - 1 - i
+    }
+    const byteIndex = Math.floor(bitPos / 8)
+    const bitIndex = bitPos % 8
+    if (bits[i] === 1) {
+      out[byteIndex] |= 1 << bitIndex
+    }
+  }
+
+  return out
 }
 
 /**
@@ -355,15 +420,12 @@ export function encodeFloat64(value: number, options?: SwapOptions): Uint8Array 
  *
  * @example
  * ```ts
- * encodeAsciiBytes('HELLO', { padByte: 0x20 })
- * encodeAsciiBytes('TEXT', { length: 10 }) // 固定 10 个字，未使用的填充 0
- * encodeAsciiBytes('ABCDEFGHIJ', { length: 3, truncate: true }) // 截断为前 6 个字符
+ * encodeAscii('HELLO', { padByte: 0x20 })
+ * encodeAscii('TEXT', { length: 10 }) // 固定 10 个字，未使用的填充 0
+ * encodeAscii('ABCDEFGHIJ', { length: 3, truncate: true }) // 截断为前 6 个字符
  * ```
  */
-export function encodeAsciiBytes(
-  value: string,
-  options: AsciiStringEncodeOptions = {},
-): Uint8Array {
+export function encodeAscii(value: string, options: AsciiStringEncodeOptions = {}): Uint8Array {
   const padByte = options.padByte ?? 0x00
   const asciiOnly = options.asciiOnly ?? true
   const fixedLength = options.length
@@ -451,13 +513,10 @@ export function decodeUint16Array(bytes: Uint8Array): number[] {
  *
  * @example
  * ```ts
- * decodeAsciiString(Uint8Array.of(0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x00)) // 'HELLO'
+ * decodeAscii(Uint8Array.of(0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x00)) // 'HELLO'
  * ```
  */
-export function decodeAsciiString(
-  bytes: Uint8Array,
-  options: AsciiStringDecodeOptions = {},
-): string {
+export function decodeAscii(bytes: Uint8Array, options: AsciiStringDecodeOptions = {}): string {
   const asciiOnly = options.asciiOnly ?? true
   const trimTrailingNull = options.trimTrailingNull ?? true
 
@@ -478,13 +537,6 @@ export function decodeAsciiString(
   }
 
   return out
-}
-
-/**
- * 将布尔值编码为单字节（0x00/0x01）。
- */
-export function encodeBoolean(value: boolean): Uint8Array {
-  return Uint8Array.of(value ? 1 : 0)
 }
 
 /**
