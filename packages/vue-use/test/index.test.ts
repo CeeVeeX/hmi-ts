@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { ResponseCode } from '@hmi-ts/core'
 import {
+  useDataRef,
   BooleanTranscoder,
   BitsTranscoder,
   Uint16Transcoder,
@@ -82,5 +84,58 @@ describe('Transcoder', () => {
     const transcoder = new AsciiTranscoder()
     expect(transcoder.decode(new Uint8Array([0x48, 0x45, 0x4c, 0x4c, 0x4f]))).toBe('HELLO')
     expect(transcoder.encode('HELLO')).toEqual(new Uint8Array([0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x00]))
+  })
+
+  it('useDataRef should not re-apply same value from subscribe callback', () => {
+    let onData: ((data: { code: ResponseCode; data: Uint8Array }) => void) | undefined
+    const write = vi.fn()
+
+    const client = {
+      subscribe: vi.fn(
+        (opts: { callback: (data: { code: ResponseCode; data: Uint8Array }) => void }) => {
+          onData = opts.callback
+          return () => {}
+        },
+      ),
+      write,
+    }
+
+    const dataRef = useDataRef({
+      client: client as never,
+      getOptions: {} as never,
+      setOptions: {} as never,
+      transcoder: new Uint16Transcoder(),
+      value: 0,
+    })
+
+    dataRef.value = 2
+    expect(write).toHaveBeenCalledTimes(1)
+
+    onData?.({ code: ResponseCode.SUCCESS, data: new Uint8Array([0x00, 0x02]) })
+    expect(dataRef.value).toBe(2)
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('useDataRef should skip write for array values with same content', () => {
+    const write = vi.fn()
+
+    const client = {
+      subscribe: vi.fn(() => () => {}),
+      write,
+    }
+
+    const dataRef = useDataRef({
+      client: client as never,
+      getOptions: {} as never,
+      setOptions: {} as never,
+      transcoder: new BitsTranscoder(2, 'msb'),
+      value: [1, 0] as (0 | 1)[],
+    })
+
+    dataRef.value = [1, 0]
+    expect(write).toHaveBeenCalledTimes(0)
+
+    dataRef.value = [0, 1]
+    expect(write).toHaveBeenCalledTimes(1)
   })
 })
