@@ -1,268 +1,372 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { HmiButton } from '@hmi-ts/vue-components'
+import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { createIntentPress } from './nope-click'
 
 const button = ref<HTMLButtonElement>()
+const button2 = ref<HTMLButtonElement>()
 
-function useButton(btn: HTMLElement) {
-  console.log('Button element:', btn)
+function useClick<B = boolean>(
+  el: Ref<HTMLElement | undefined>,
+  options?: {
+    branch?: B[]
+  },
+) {
+  const branch = (options?.branch ?? [true, false]) as B[]
+  const active = ref(0)
+  const status = ref<'start' | 'cancel' | 'intent'>('cancel')
+  const down = ref(false)
+  const lasted = ref(0)
+  const clickCount = ref(0)
 
-  btn.addEventListener('contextmenu', (e) => e.preventDefault())
-  btn.addEventListener('selectstart', (e) => e.preventDefault())
+  let startAt = Date.now()
+  let endAt = Date.now()
+  let timer: number | undefined
 
-  // 配置参数，按需调整
-  const CONFIG = {
-    moveTolerance: 30, // 滑动容忍像素，小于此距离不算滑出取消
-    cancelBufferMs: 120, // 断触缓冲延时，瞬时断触不立即取消
-  }
-
-  // 状态变量
-  let state = {
-    isPressing: false,
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    bufferTimer: null,
-  }
-
-  // 清除缓冲定时器
-  function clearBufferTimer() {
-    if (state.bufferTimer) {
-      clearTimeout(state.bufferTimer)
-      state.bufferTimer = null
+  function clearTimer() {
+    if (timer) {
+      clearInterval(timer)
+      timer = undefined
     }
+
+    down.value = false
+    endAt = Date.now()
+    lasted.value = endAt - startAt
+    clickCount.value += 1
+
+    active.value = (active.value + 1) % branch.length
   }
 
-  // 统一结束按压（抬起/最终取消）
-  function endPress() {
-    clearBufferTimer()
-    if (!state.isPressing) return
+  const press = createIntentPress(
+    (e) => {
+      status.value = e.phase
+      switch (e.phase) {
+        case 'start':
+          down.value = true
+          startAt = Date.now()
+          timer = window.setInterval(() => {
+            lasted.value = Date.now() - startAt
+          }, 1000 / 60)
 
-    state.isPressing = false
-    state.pointerId = null
-    btn.classList.remove('pressing')
-    console.log('按压结束')
-  }
+          if (startAt - endAt > 200) {
+            clickCount.value = 0
+          }
 
-  // 按下
-  btn.addEventListener('pointerdown', (e) => {
-    // 只响应左键/单指触摸
-    if (e.button !== 0 || state.isPressing) return
-    e.preventDefault()
-    clearBufferTimer()
+          break
+        case 'cancel':
+          clearTimer()
+          break
+        case 'intent':
+          clearTimer()
+          break
+      }
+    },
+    {
+      slop: 100,
+      preventDefault: true,
+      clickGuard: true,
+    },
+  )
 
-    state.isPressing = true
-    state.pointerId = e.pointerId
-    state.startX = e.clientX
-    state.startY = e.clientY
+  onMounted(() => {
+    if (el.value) {
+      el.value.addEventListener('contextmenu', (e) => e.preventDefault())
+      el.value.addEventListener('selectstart', (e) => e.preventDefault())
 
-    // 捕获指针
-    try {
-      btn.setPointerCapture(e.pointerId)
-    } catch (err) {}
-
-    btn.classList.add('pressing')
-    console.log('按下开始')
-  })
-
-  // 滑动判断偏移
-  btn.addEventListener('pointermove', (e) => {
-    if (!state.isPressing || e.pointerId !== state.pointerId) return
-
-    // 计算滑动距离
-    const dx = e.clientX - state.startX
-    const dy = e.clientY - state.startY
-    const dist = Math.sqrt(dx * dx + dy * dy)
-
-    // 滑动超过容忍值，准备缓冲取消
-    if (dist > CONFIG.moveTolerance) {
-      clearBufferTimer()
-      state.bufferTimer = setTimeout(() => {
-        endPress()
-        console.log('滑动超出阈值，取消按压')
-      }, CONFIG.cancelBufferMs)
-    } else {
-      // 小幅滑动，清除取消缓冲，保持按压
-      clearBufferTimer()
+      el.value.addEventListener('pointerdown', press.onPointerDown, { passive: true })
+      el.value.addEventListener('click', press.onClickCapture, { capture: true })
     }
   })
 
-  // 正常抬起
-  btn.addEventListener('pointerup', (e) => {
-    if (!state.isPressing || e.pointerId !== state.pointerId) return
-    try {
-      btn.releasePointerCapture(e.pointerId)
-    } catch (err) {}
-    endPress()
-    console.log('正常抬起')
+  onUnmounted(() => {
+    if (el.value) {
+      el.value.removeEventListener('pointerdown', press.onPointerDown)
+      el.value.removeEventListener('click', press.onClickCapture)
+    }
+
+    clearTimer()
   })
 
-  // 操作取消（断触、滑出、滚动、多指触发）
-  btn.addEventListener('pointercancel', (e) => {
-    if (!state.isPressing || e.pointerId !== state.pointerId) return
-    // 不立刻结束，走缓冲延时，过滤瞬时断触
-    clearBufferTimer()
-    state.bufferTimer = setTimeout(() => {
-      endPress()
-      console.log('缓冲后判定取消（断触/滑出）')
-    }, CONFIG.cancelBufferMs)
-  })
-
-  // 全局兜底：防止指针丢失，页面任意位置松开都重置
-  document.addEventListener('pointerup', () => {
-    if (state.isPressing) endPress()
-  })
+  return {
+    down,
+    status,
+    lasted,
+    clickCount,
+    active: computed(() => branch[active.value]),
+  }
 }
 
-onMounted(() => {
-  if (button.value) {
-    useButton(button.value)
-  }
+const b1 = useClick(button)
+const b2 = useClick(button2, {
+  branch: ['A', 'B', 'C'],
 })
 </script>
 
 <template>
   <div class="app">
-    <button ref="button">Increment</button>
+    <div class="around" ref="button">
+      <div class="handle">
+        <div class="button-wrapper">
+          <div class="inside">
+            <!-- {{ b1.status.value }} {{ b1.lasted.value }} {{ b1.clickCount.value }}
+            {{ b1.active.value }}
+            {{ b1.down.value }} -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="but w-200px h-100px" ref="button2">
+      {{ b2.status.value }} {{ b2.lasted.value }} {{ b2.clickCount.value }} {{ b2.active.value }}
+      {{ b2.down.value }}
+    </button>
   </div>
 </template>
 
-<style scoped>
+<style>
+.but-groove {
+  display: inline-block;
+  border: 5px solid #656565;
+  outline: 1px solid #a6a6a6;
+  cursor: pointer;
+  background-color: #000000;
+  position: relative;
+  padding: 0px;
+  box-shadow: inset 0 0 9px 4px #4e4e4e;
+  margin: 10px;
+  border-radius: 4px;
+  /* box-sizing: border-box; */
+}
+
+.but-groove::after {
+  border: 1px solid #a6a6a6;
+  box-sizing: border-box;
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.but {
+  border: 10px solid #2f2f2f;
+  outline: 1px solid #5e5e5e;
+  cursor: pointer;
+  background-color: #2f2f2f;
+  color: #fff;
+  font-size: 16px;
+  position: relative;
+  margin: 5px;
+  padding: 10px;
+  box-shadow: 0 0 20px 7px #000000b3;
+  border-radius: 2px;
+}
+
+.but::before {
+  box-sizing: border-box;
+  border: 1px solid #000000;
+  /* outline: 10px solid #1100ff; */
+  background: linear-gradient(90deg, #232323, #4a4a4a);
+  /* box-shadow:
+    -10px -10px 10px rgba(255, 255, 255, 0.25),
+    10px 5px 10px rgba(0, 0, 0, 0.15); */
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* background: linear-gradient(135deg, #313539 0%, #4a5559 100%); */
+  /* box-shadow: inset 0 0 8px 4px #000000; */
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
 .app {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #313539 0%, #4a5559 100%);
   color: #333;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
-header {
-  background: rgba(255, 255, 255, 0.95);
-  padding: 3rem 2rem;
-  text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-header h1 {
-  margin: 0;
-  font-size: 2.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-header p {
-  margin: 0.5rem 0 0;
-  color: #666;
-  font-size: 1.1rem;
-}
-
-main {
-  flex: 1;
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-section {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-section h2 {
-  margin-top: 0;
-  color: #667eea;
-  border-bottom: 2px solid #667eea;
-  padding-bottom: 0.5rem;
-}
-
-.counter strong {
-  color: #764ba2;
-  font-size: 1.5rem;
-}
-
-.buttons {
+.around {
+  width: 180px;
+  height: 180px;
   display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
-}
+  justify-content: center;
+  align-items: center;
+  border-radius: 10%;
+  background-image: linear-gradient(180deg, #f5f8fa, #9da4a8);
 
-button {
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  border: none;
-  border-radius: 6px;
-  background: #667eea;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-}
+  .handle {
+    width: 155px;
+    height: 155px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 10%;
+    background: #c5d1da;
+    box-shadow:
+      0 0 10px rgba(0, 0, 0, 0.5),
+      0 10px 10px rgba(0, 0, 0, 0.2),
+      inset 0 0 16px rgba(0, 0, 0, 0.85),
+      inset 0 0 24px rgba(0, 0, 0, 0.75),
+      inset 0 0 48px rgba(0, 0, 0, 0.2);
 
-button:hover {
-  background: #764ba2;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(118, 75, 162, 0.4);
-}
+    perspective: 300px;
 
-button:active {
-  transform: translateY(0);
-}
+    .button-wrapper {
+      width: 147px;
+      height: 147px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: 10%;
+      background-image: linear-gradient(180deg, #eff1f1, #86969c);
 
-.info ul {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0 0;
-}
+      cursor: pointer;
 
-.info li {
-  padding: 0.5rem 0;
-  font-size: 1.05rem;
-  color: #555;
-}
+      box-shadow:
+        0 9px 14px rgba(0, 0, 0, 0.5),
+        0 19px 8px -2px rgba(0, 0, 0, 0.2),
+        0 33px 8px rgba(0, 0, 0, 0.4),
+        0 -12px 10px rgba(255, 255, 255, 0.5),
+        inset 0 3px 3px rgba(255, 255, 255, 0.6),
+        inset 0 -3px 3px rgba(89, 91, 92, 0.6);
 
-footer {
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  text-align: center;
-  padding: 1.5rem;
-  margin-top: auto;
-}
+      transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        filter 0.15s ease;
 
-footer p {
-  margin: 0;
-}
+      .inside {
+        position: relative;
+        width: 132px;
+        height: 132px;
+        border-radius: 50%;
+        background-image: linear-gradient(180deg, #adb9bf, #d4dbdd);
 
-@media (max-width: 768px) {
-  header {
-    padding: 2rem 1rem;
+        box-shadow:
+          inset 0 3px 6px rgba(152, 160, 163, 0.4),
+          inset 0 -3px 6px rgba(238, 244, 246, 0.4);
+
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease,
+          background 0.15s ease;
+      }
+
+      &:hover {
+        transform: translateY(-2px);
+
+        filter: brightness(1.05);
+
+        box-shadow:
+          0 12px 18px rgba(0, 0, 0, 0.45),
+          0 24px 10px rgba(0, 0, 0, 0.2),
+          0 36px 10px rgba(0, 0, 0, 0.35),
+          0 -14px 12px rgba(255, 255, 255, 0.7),
+          inset 0 4px 4px rgba(255, 255, 255, 0.8),
+          inset 0 -3px 3px rgba(89, 91, 92, 0.45);
+
+        .inside {
+          transform: translateY(-1px);
+          box-shadow:
+            inset 0 2px 5px rgba(255, 255, 255, 0.5),
+            inset 0 -3px 6px rgba(0, 0, 0, 0.12);
+        }
+      }
+
+      &:active,
+      &.pressed {
+        transform: translateY(5px) scale(0.985);
+
+        filter: brightness(0.97);
+
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, 0.35),
+          inset 0 6px 8px rgba(0, 0, 0, 0.22),
+          inset 0 -2px 2px rgba(255, 255, 255, 0.3);
+
+        .inside {
+          transform: translateY(3px);
+
+          background-image: linear-gradient(180deg, #99a7ad, #c7d0d4);
+
+          box-shadow:
+            inset 0 8px 10px rgba(0, 0, 0, 0.18),
+            inset 0 -2px 2px rgba(255, 255, 255, 0.25);
+        }
+      }
+    }
+
+    &:has(.button-wrapper:active),
+    &.pressed {
+      box-shadow:
+        0 0 8px rgba(0, 0, 0, 0.45),
+        0 5px 5px rgba(0, 0, 0, 0.15),
+        inset 0 0 18px rgba(0, 0, 0, 0.9),
+        inset 0 0 36px rgba(0, 0, 0, 0.45);
+    }
   }
-
-  header h1 {
-    font-size: 1.8rem;
-  }
-
-  main {
-    padding: 1rem;
-  }
-
-  section {
-    padding: 1.5rem;
-  }
-
-  .buttons {
-    flex-direction: column;
-  }
-
-  button {
-    width: 100%;
-  }
 }
+/* .around {
+  width: 180px;
+  height: 180px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 10%;
+  background-image: linear-gradient(0, #f5f8fa, #9da4a8);
+
+  .handle {
+    width: 155px;
+    height: 155px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 10%;
+    background: #c5d1da;
+    box-shadow:
+      0 0 10px rgba(0, 0, 0, 0.5),
+      0 10px 10px rgba(0, 0, 0, 0.2),
+      inset 0 0 16px rgba(0, 0, 0, 0.85),
+      inset 0 0 24px rgba(0, 0, 0, 0.75),
+      inset 0 0 48px rgba(0, 0, 0, 0.2);
+    perspective: 300px;
+
+    .button-wrapper {
+      width: 147px;
+      height: 147px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: 10%;
+      background-image: linear-gradient(0, #86969c, #eff1f1);
+      box-shadow:
+        0 9px 14px rgba(0, 0, 0, 0.5),
+        0 19px 8px -2px rgba(0, 0, 0, 0.2),
+        0 33px 8px rgba(0, 0, 0, 0.4),
+        0 -12px 10px rgba(255, 255, 255, 0.5),
+        inset 0 3px 3px rgba(255, 255, 255, 0.6),
+        inset 0 -3px 3px rgba(89, 91, 92, 0.6);
+      transition: 0.25s ease-out;
+
+      .inside {
+        position: relative;
+        width: 132px;
+        height: 132px;
+        border-radius: 50%;
+        background-image: linear-gradient(180deg, #adb9bf, #d4dbdd);
+        box-shadow:
+          inset 0 3px 6px rgba(152, 160, 163, 0.4),
+          inset 0 -3px 6px rgba(238, 244, 246, 0.4);
+      }
+    }
+  }
+} */
 </style>
