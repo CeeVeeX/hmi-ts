@@ -36,12 +36,14 @@
 <style scoped>
 /* From Uiverse.io by m1her */
 .radio-input {
+  vertical-align: top;
+
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background-color: #131314;
   padding: 6px;
-  border-radius: 8px;
+  /* border-radius: 8px; */
   overflow: hidden;
   height: 94px;
 }

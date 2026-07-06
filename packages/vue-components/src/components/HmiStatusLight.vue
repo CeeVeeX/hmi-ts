@@ -5,26 +5,27 @@ defineOptions({
   name: 'HmiStatusLight',
 })
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    variant?: 'primary' | 'ghost'
-    disabled?: boolean
+    radius?: string
   }>(),
   {
-    variant: 'primary',
-    disabled: false,
+    radius: '50%',
   },
 )
+
 
 const emit = defineEmits<{
   click: [MouseEvent]
 }>()
 
-const active = ref(Math.random() > 0.5)
+const active = ref(true)
 </script>
 
 <template>
-  <div class="around" ref="button">
+  <div class="around" ref="button" :style="{
+    '--hmi-radius': props.radius,
+  }"">
     <div class="handle" :class="{ pressed: active }">
       <div class="button-wrapper" :class="{ pressed: active }">
         <div class="inside">
@@ -123,12 +124,13 @@ const active = ref(Math.random() > 0.5)
 
       &.pressed {
         .inside {
-          background-image: radial-gradient(#ffc97e, #ff1818 40%, transparent 70%);
+          background-image: radial-gradient(#fff, #ff1818 50%);
         }
       }
     }
 
     &.pressed {
+
     }
   }
 }

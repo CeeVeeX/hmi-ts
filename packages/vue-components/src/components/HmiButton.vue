@@ -5,14 +5,12 @@ defineOptions({
   name: 'HmiButton',
 })
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    variant?: 'primary' | 'ghost'
-    disabled?: boolean
+    radius?: string
   }>(),
   {
-    variant: 'primary',
-    disabled: false,
+    radius: '10px',
   },
 )
 
@@ -26,7 +24,13 @@ const b1 = useClick(button)
 </script>
 
 <template>
-  <div class="around" ref="button">
+  <div
+    class="around"
+    ref="button"
+    :style="{
+      '--hmi-radius': props.radius,
+    }"
+  >
     <div class="handle" :class="{ pressed: b1.down.value }">
       <div class="button-wrapper" :class="{ pressed: b1.down.value }">
         <div class="inside">

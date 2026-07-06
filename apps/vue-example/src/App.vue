@@ -1,15 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
-import { HmiButton, HmiStatusLight, HmiInput, HmiRange, HmiRadio } from '@hmi-ts/vue-components'
+import {
+  HmiButton,
+  HmiStatusLight,
+  HmiInput,
+  HmiRange,
+  HmiRadio,
+  HmiSwitch,
+} from '@hmi-ts/vue-components'
 </script>
 
 <template>
   <div class="app">
-    <HmiButton v-for="value in 10" class="w-100px h-100px"> {{ value }} </HmiButton>
-    <HmiStatusLight v-for="value in 10" class="w-40px h-40px"></HmiStatusLight>
+    <HmiButton class="w-150px h-150px"> 按钮 </HmiButton>
+    <HmiButton class="w-150px h-150px" radius="50%"> 圆形按钮 </HmiButton>
+    <HmiStatusLight class="w-40px h-40px"></HmiStatusLight>
+    <HmiStatusLight class="w-40px h-40px" radius="2px"></HmiStatusLight>
     <HmiInput w-200px h-40px></HmiInput>
     <HmiRange></HmiRange>
     <HmiRadio></HmiRadio>
+    <HmiSwitch></HmiSwitch>
   </div>
 </template>
 

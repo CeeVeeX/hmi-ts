@@ -33,7 +33,7 @@ const emit = defineEmits<{
   width: 320px;
   height: 12px;
   border-radius: 999px;
-  background: #131314;
+  /* background: #131314; */
 
   /* box-shadow:
     inset 0 2px 4px rgba(255, 255, 255, 0.8),
@@ -47,7 +47,7 @@ const emit = defineEmits<{
 .neo-slider::-webkit-slider-runnable-track {
   height: 12px;
   border-radius: 999px;
-  background: transparent;
+  background: #131314;
 }
 
 /* Thumb */
@@ -71,10 +71,7 @@ const emit = defineEmits<{
   transition: 0.2s;
 }
 
-.neo-slider::-webkit-slider-thumb:hover {
-  /* transform: scale(0.95); */
-}
-
+.neo-slider::-webkit-slider-thumb:hover,
 .neo-slider::-webkit-slider-thumb:active {
   transform: scale(1.08);
   box-shadow:
