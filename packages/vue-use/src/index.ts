@@ -2,6 +2,7 @@ import { computed, onUnmounted, shallowRef, type Ref } from 'vue'
 import { ResponseCode, type IClient } from '@hmi-ts/core'
 import type { ITranscoder } from './transcoder'
 export * from './transcoder'
+export * from './use'
 
 function defaultEquals(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) {

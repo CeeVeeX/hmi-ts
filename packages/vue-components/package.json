@@ -27,22 +27,26 @@
     "./components": {
       "types": "./dist/components/index.d.ts",
       "import": "./dist/components/index.js"
-    }
+    },
+    "./style.css": "./dist/components.css"
   },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "vite build && pnpm run build:types",
-    "build:types": "vue-tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir dist",
+    "build:types": "vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly --outDir dist",
     "dev": "pnpm run build:types && concurrently \"pnpm run dev:bundle\" \"pnpm run dev:types\"",
     "dev:bundle": "vite build --watch --emptyOutDir false",
-    "dev:types": "vue-tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir dist --watch",
+    "dev:types": "vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly --outDir dist --watch",
     "lint": "eslint src --ext .ts,.vue",
     "test": "vitest run --passWithNoTests -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
+    "@hmi-ts/codec": "workspace:*",
+    "@hmi-ts/core": "workspace:*",
+    "@hmi-ts/vue-use": "workspace:*",
     "vue": "^3.5.0"
   },
   "devDependencies": {
@@ -50,8 +54,8 @@
     "concurrently": "^9.2.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.9",
+    "vite-plugin-lib-inject-css": "^2.2.2",
     "vitest": "^4.0.8",
-    "vue": "^3.5.0",
     "vue-tsc": "^2.1.10"
   },
   "keywords": [

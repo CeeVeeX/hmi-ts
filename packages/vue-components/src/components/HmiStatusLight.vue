@@ -2,7 +2,7 @@
 import { useClick } from '@hmi-ts/vue-use'
 import { ref } from 'vue'
 defineOptions({
-  name: 'HmiButton',
+  name: 'HmiStatusLight',
 })
 
 withDefaults(
@@ -20,15 +20,13 @@ const emit = defineEmits<{
   click: [MouseEvent]
 }>()
 
-const button = ref<HTMLButtonElement>()
-
-const b1 = useClick(button)
+const active = ref(Math.random() > 0.5)
 </script>
 
 <template>
   <div class="around" ref="button">
-    <div class="handle" :class="{ pressed: b1.down.value }">
-      <div class="button-wrapper" :class="{ pressed: b1.down.value }">
+    <div class="handle" :class="{ pressed: active }">
+      <div class="button-wrapper" :class="{ pressed: active }">
         <div class="inside">
           <slot />
         </div>
@@ -39,12 +37,12 @@ const b1 = useClick(button)
 
 <style scoped>
 .around {
-  --hmi-radius: 10px;
+  --hmi-radius: 50%;
 
   vertical-align: top;
   box-sizing: border-box;
 
-  padding: 20px;
+  padding: 5px;
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -62,11 +60,11 @@ const b1 = useClick(button)
     border-radius: var(--hmi-radius);
     background: #c5d1da;
     box-shadow:
-      0 0 10px rgba(0, 0, 0, 0.5),
-      0 10px 10px rgba(0, 0, 0, 0.2),
-      inset 0 0 16px rgba(0, 0, 0, 0.85),
-      inset 0 0 24px rgba(0, 0, 0, 0.75),
-      inset 0 0 48px rgba(0, 0, 0, 0.2);
+      0 0 5px rgb(0 0 0),
+      0px 0px 8px rgba(0, 0, 0, 0.2),
+      inset 0 0 16px rgb(0 0 0 / 85%),
+      inset 0 0 24px rgb(0 0 0 / 75%),
+      inset 0 0 48px rgb(0 0 0 / 60%);
 
     perspective: 300px;
 
@@ -75,22 +73,23 @@ const b1 = useClick(button)
 
       width: 100%;
       height: 100%;
-      padding: 4px;
+      padding: 2px;
       display: flex;
       justify-content: center;
       align-items: center;
       border-radius: var(--hmi-radius);
-      background-image: linear-gradient(180deg, #eff1f1, #86969c);
+      background-image: linear-gradient(180deg, #2a2a2a, #525252);
+      /* background-image: radial-gradient(transparent 30%, rgba(101, 0, 0, 0.7) 70%); */
 
       cursor: pointer;
 
       box-shadow:
-        0 9px 14px rgba(0, 0, 0, 0.5),
-        0 19px 8px -2px rgba(0, 0, 0, 0.2),
-        0 33px 8px rgba(0, 0, 0, 0.4),
-        0 -12px 10px rgba(255, 255, 255, 0.2),
-        inset 0 3px 3px rgba(255, 255, 255, 0.6),
-        inset 0 -3px 3px rgba(89, 91, 92, 0.6);
+        -1px 5px 14px #00000080,
+        0px 5px 8px -2px #0003,
+        0 0 8px #0006,
+        0 0 10px #ffffff80,
+        inset 0 3px 3px #fff9,
+        inset 0 -3px 3px #595b5c99;
 
       transition:
         transform 0.05s ease,
@@ -109,11 +108,12 @@ const b1 = useClick(button)
         padding: 4px;
         position: relative;
         border-radius: var(--hmi-radius);
-        background-image: linear-gradient(180deg, #adb9bf, #d4dbdd);
+        background-image: linear-gradient(#2a2a2a, #525252);
 
         box-shadow:
-          inset 0 3px 6px rgba(152, 160, 163, 0.4),
-          inset 0 -3px 6px rgba(238, 244, 246, 0.4);
+          0 0 10px rgba(255, 255, 255, 0.5),
+          inset 0 8px 10px rgba(0, 0, 0, 0.18),
+          inset 0 -2px 2px rgba(255, 255, 255, 0.25);
 
         transition:
           transform 0.05s ease,
@@ -122,35 +122,13 @@ const b1 = useClick(button)
       }
 
       &.pressed {
-        transform: scale(0.985);
-
-        filter: brightness(0.97);
-
-        box-shadow:
-          0px 0px 14px rgba(0, 0, 0, 0.5),
-          0px 0px 8px -2px rgba(0, 0, 0, 0.2),
-          0px 0px 8px rgba(0, 0, 0, 0.4),
-          0px 0px 10px rgba(255, 255, 255, 0.5),
-          inset 0px 3px 3px rgba(255, 255, 255, 0.6),
-          inset 0 -3px 3px rgba(89, 91, 92, 0.6);
-
         .inside {
-          background-image: linear-gradient(180deg, #99a7ad, #c7d0d4);
-
-          box-shadow:
-            inset 0 8px 10px rgba(0, 0, 0, 0.18),
-            inset 0 -2px 2px rgba(255, 255, 255, 0.25);
+          background-image: radial-gradient(#ffc97e, #ff1818 40%, transparent 70%);
         }
       }
     }
 
     &.pressed {
-      box-shadow:
-        0 0 5px rgb(0 0 0),
-        0px 0px 8px rgba(0, 0, 0, 0.2),
-        inset 0 0 16px rgb(0 0 0 / 85%),
-        inset 0 0 24px rgb(0 0 0 / 75%),
-        inset 0 0 48px rgb(0 0 0 / 60%);
     }
   }
 }
