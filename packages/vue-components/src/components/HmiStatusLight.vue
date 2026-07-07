@@ -83,6 +83,8 @@ const active = ref(true)
       /* background-image: radial-gradient(transparent 30%, rgba(101, 0, 0, 0.7) 70%); */
 
       cursor: pointer;
+            /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+      -webkit-tap-highlight-color: transparent;
 
       box-shadow:
         -1px 5px 14px #00000080,
@@ -120,6 +122,38 @@ const active = ref(true)
           transform 0.05s ease,
           box-shadow 0.05s ease,
           background 0.05s ease;
+      }
+
+            .inside::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--hmi-radius);
+        background-image: linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0) 50%,
+          rgba(255, 255, 255, 0.126) 50%
+        );
+        background-size: 4px 100%;
+      }
+
+      .inside::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--hmi-radius);
+        background-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 50%,
+          rgba(255, 255, 255, 0.126) 50%
+        );
+        background-size: 100% 4px;
       }
 
       &.pressed {

@@ -41,6 +41,8 @@ const emit = defineEmits<{
     0 2px 6px rgba(0, 0, 0, 0.15); */
 
   cursor: pointer;
+  /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Track (Chrome) */

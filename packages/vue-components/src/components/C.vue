@@ -449,6 +449,8 @@
     inset 0 0 5px rgba(0, 0, 0, 0.5);
   position: relative;
   cursor: pointer;
+  /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+  -webkit-tap-highlight-color: transparent;
   transition: transform 0.2s;
 }
 
@@ -505,6 +507,8 @@
   box-shadow: 0 10px 10px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55); /* Snap effect */
   cursor: pointer;
+  /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Jewel Pilot Light */

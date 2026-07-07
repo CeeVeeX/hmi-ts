@@ -87,6 +87,8 @@ const b1 = useClick(button)
       background-image: linear-gradient(180deg, #eff1f1, #86969c);
 
       cursor: pointer;
+      /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+      -webkit-tap-highlight-color: transparent;
 
       box-shadow:
         0 9px 14px rgba(0, 0, 0, 0.5),
@@ -114,6 +116,8 @@ const b1 = useClick(button)
         position: relative;
         border-radius: var(--hmi-radius);
         background-image: linear-gradient(180deg, #adb9bf, #d4dbdd);
+        /* background: linear-gradient(rgba(0, 0, 0, 0) 50%, rgb(0, 0, 0) 50%);
+        background-size: 100% 4px; */
 
         box-shadow:
           inset 0 3px 6px rgba(152, 160, 163, 0.4),
@@ -123,6 +127,38 @@ const b1 = useClick(button)
           transform 0.05s ease,
           box-shadow 0.05s ease,
           background 0.05s ease;
+      }
+
+      .inside::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--hmi-radius);
+        background-image: linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0) 50%,
+          rgba(255, 255, 255, 0.126) 50%
+        );
+        background-size: 4px 100%;
+      }
+
+      .inside::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--hmi-radius);
+        background-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 50%,
+          rgba(255, 255, 255, 0.126) 50%
+        );
+        background-size: 100% 4px;
       }
 
       &.pressed {
@@ -139,7 +175,8 @@ const b1 = useClick(button)
           inset 0 -3px 3px rgba(89, 91, 92, 0.6);
 
         .inside {
-          background-image: linear-gradient(180deg, #99a7ad, #c7d0d4);
+          /* background-image: linear-gradient(180deg, #0887be, #0d9dda); */
+          background-image: radial-gradient(#a4e4ff, #00b3ff 80%);
 
           box-shadow:
             inset 0 8px 10px rgba(0, 0, 0, 0.18),

@@ -30,6 +30,8 @@
 
 .slider {
   cursor: pointer;
+  /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+  -webkit-tap-highlight-color: transparent;
   position: relative;
   width: 100%;
   height: 100%;
