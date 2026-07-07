@@ -7,10 +7,10 @@ export function useClick<B = boolean>(
     branch?: B[]
   },
 ) {
-  const branch = (options?.branch ?? [true, false]) as B[]
+  const branch = (options?.branch ?? [false, true]) as B[]
   const active = ref(0)
   const status = ref<'start' | 'cancel' | 'intent'>('cancel')
-  const down = ref(false)
+  const pressed = ref(false)
   const lasted = ref(0)
   const clickCount = ref(0)
 
@@ -24,9 +24,9 @@ export function useClick<B = boolean>(
       timer = undefined
     }
 
-    down.value = false
+    pressed.value = false
     endAt = Date.now()
-    lasted.value = endAt - startAt
+    lasted.value = 0
     clickCount.value += 1
 
     active.value = (active.value + 1) % branch.length
@@ -37,7 +37,7 @@ export function useClick<B = boolean>(
       status.value = e.phase
       switch (e.phase) {
         case 'start':
-          down.value = true
+          pressed.value = true
           startAt = Date.now()
           timer = window.setInterval(() => {
             lasted.value = Date.now() - startAt
@@ -83,7 +83,7 @@ export function useClick<B = boolean>(
   })
 
   return {
-    down,
+    pressed,
     status,
     lasted,
     clickCount,

@@ -49,7 +49,8 @@ const emit = defineEmits<{
 .neo-slider::-webkit-slider-runnable-track {
   height: 12px;
   border-radius: 999px;
-  background: #131314;
+  background: #15120f;
+  /* background: #9b9797; */
 }
 
 /* Thumb */
