@@ -1,18 +1,25 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { createIntentPress } from '../nope-click'
 
-export function useClick<B = boolean>(
+export function useClick(
   el: Ref<HTMLElement | undefined>,
   options?: {
-    branch?: B[]
+    longPress?: number
+    latching?: boolean
   },
 ) {
-  const branch = (options?.branch ?? [false, true]) as B[]
-  const active = ref(0)
+  const active = ref(false)
   const status = ref<'start' | 'cancel' | 'intent'>('cancel')
   const pressed = ref(false)
   const lasted = ref(0)
   const clickCount = ref(0)
+  const progress = computed(() => {
+    if (lasted.value === 0 || !options?.longPress) {
+      return 0
+    }
+
+    return lasted.value / options.longPress
+  })
 
   let startAt = Date.now()
   let endAt = Date.now()
@@ -24,12 +31,21 @@ export function useClick<B = boolean>(
       timer = undefined
     }
 
+    if (options?.longPress) {
+      if (lasted.value >= options.longPress) {
+        clickCount.value += 1
+        if (options.latching) active.value = !active.value
+      }
+    } else {
+      clickCount.value += 1
+      if (options?.latching) active.value = !active.value
+    }
+
+    if (!options?.latching) active.value = false
+
     pressed.value = false
     endAt = Date.now()
     lasted.value = 0
-    clickCount.value += 1
-
-    active.value = (active.value + 1) % branch.length
   }
 
   const press = createIntentPress(
@@ -46,6 +62,7 @@ export function useClick<B = boolean>(
           if (startAt - endAt > 200) {
             clickCount.value = 0
           }
+          if (!options?.latching) active.value = true
 
           break
         case 'cancel':
@@ -87,6 +104,7 @@ export function useClick<B = boolean>(
     status,
     lasted,
     clickCount,
-    active: computed(() => branch[active.value]),
+    active,
+    progress,
   }
 }

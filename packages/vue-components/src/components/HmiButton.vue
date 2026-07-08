@@ -7,6 +7,14 @@ defineOptions({
 
 const props = withDefaults(
   defineProps<{
+    handlePadding?: string
+    wrapperPadding?: string
+    insidePadding?: string
+
+    latching?: boolean
+    /**
+     * 内容内嵌
+     */
     inside?: boolean
     /**
      * 按钮的圆角大小，默认 10px
@@ -18,7 +26,7 @@ const props = withDefaults(
      * inner: 内部光效
      * 默认不显示光效
      */
-    light?: 'ring' | 'inner'
+    light?: 'ring' | 'inner' | null | ''
     /**
      * 长按触发事件的时间间隔，单位毫秒
      */
@@ -34,6 +42,9 @@ const props = withDefaults(
   }>(),
   {
     radius: '10px',
+    handlePadding: '4px',
+    wrapperPadding: '2px',
+    insidePadding: '4px',
   },
 )
 
@@ -43,15 +54,7 @@ const emit = defineEmits<{
 
 const button = ref<HTMLButtonElement>()
 
-const b1 = useClick(button)
-
-const longPressProgress = computed(() => {
-  if (!props.longPress) {
-    return 0
-  }
-
-  return Math.max(0, Math.min(1, b1.lasted.value / props.longPress))
-})
+const b1 = useClick(button, props)
 </script>
 
 <template>
@@ -66,6 +69,9 @@ const longPressProgress = computed(() => {
     }"
     :style="{
       '--hmi-radius': props.radius,
+      '--hmi-handle-padding': props.handlePadding,
+      '--hmi-wrapper-padding': props.wrapperPadding,
+      '--hmi-inside-padding': props.insidePadding,
     }"
   >
     <div class="hmi-button-handle">
@@ -85,9 +91,9 @@ const longPressProgress = computed(() => {
       v-if="longPress"
       class="hmi-button-progress"
       :style="{
-        '--progress': longPressProgress,
+        '--progress': b1.progress.value,
         '--progress-color':
-          longPressProgress >= 1 ? 'rgba(44, 195, 98, 0.95)' : 'rgba(0, 195, 255, 0.95)',
+          b1.progress.value >= 1 ? 'rgba(44, 195, 98, 0.95)' : 'rgba(0, 195, 255, 0.95)',
       }"
     />
   </div>
@@ -95,7 +101,6 @@ const longPressProgress = computed(() => {
 
 <style scoped>
 .hmi-button {
-  --hmi-radius: 10px;
   position: relative;
   vertical-align: top;
   box-sizing: border-box;
@@ -122,6 +127,7 @@ const longPressProgress = computed(() => {
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
+
     mask:
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
@@ -134,7 +140,7 @@ const longPressProgress = computed(() => {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 4px;
+    padding: var(--hmi-handle-padding);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -142,18 +148,18 @@ const longPressProgress = computed(() => {
     background: #9b9797;
     perspective: 300px;
     box-shadow:
-      0 0 10px rgba(0, 0, 0, 0.5),
-      0 10px 10px rgba(0, 0, 0, 0.2),
-      inset 0 0 16px rgba(0, 0, 0, 0.85),
-      inset 0 0 24px rgba(0, 0, 0, 0.75),
-      inset 0 0 48px rgba(0, 0, 0, 0.2);
+      0 0 10px #00000080,
+      0 10px 10px #0003,
+      inset 0 0 10px #000000d9,
+      inset 0 0 14px #000000bf,
+      inset 0 0 48px #0003;
 
     .hmi-button-button-wrapper {
       position: relative;
       box-sizing: border-box;
       width: 100%;
       height: 100%;
-      padding: 2px;
+      padding: var(--hmi-wrapper-padding);
       display: grid;
       place-items: center;
       border-radius: var(--hmi-radius);
@@ -186,7 +192,7 @@ const longPressProgress = computed(() => {
         justify-content: center;
         align-items: center;
 
-        padding: 4px;
+        padding: var(--hmi-inside-padding);
         position: relative;
         border-radius: var(--hmi-radius);
         background: #aaaaaa;
@@ -205,7 +211,7 @@ const longPressProgress = computed(() => {
         grid-area: 1 / 1;
         z-index: 1;
         border-radius: var(--hmi-radius);
-        padding: 4px;
+        padding: var(--hmi-inside-padding);
         box-sizing: border-box;
         display: flex;
         justify-content: center;
