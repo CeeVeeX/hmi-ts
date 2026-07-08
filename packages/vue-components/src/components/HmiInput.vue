@@ -30,7 +30,7 @@ const emit = defineEmits<{
   box-sizing: border-box;
   /* background: #f5f8fa36; */
   background: #f5f8fa00;
-  border: 2px solid #ccc;
+  border: 2px solid #ebebeb;
   color: #ccc;
 
   padding: 4px;
@@ -46,6 +46,6 @@ const emit = defineEmits<{
 
 /* 占位符样式 */
 .hmi-input::placeholder {
-  color: #ccc;
+  color: #ebebeb;
 }
 </style>

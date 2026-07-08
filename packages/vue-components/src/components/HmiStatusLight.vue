@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useClick } from '@hmi-ts/vue-use'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 defineOptions({
   name: 'HmiStatusLight',
 })
@@ -8,26 +8,54 @@ defineOptions({
 const props = withDefaults(
   defineProps<{
     radius?: string
+    activeColor?: string
+    inactiveColor?: string
+    /**
+     * 激活时闪烁
+     */
+    blink?: boolean
+    /**
+     * 非激活时闪烁
+     */
+    blinkInactive?: boolean
   }>(),
   {
     radius: '50%',
+    activeColor: '#db1010',
+    inactiveColor: '#444444',
+    blink: false,
+    blinkInactive: false,
   },
 )
 
+const modelValue = defineModel<boolean>()
 
 const emit = defineEmits<{
   click: [MouseEvent]
 }>()
 
-const active = ref(true)
+watch(modelValue, (newValue) => {
+  console.log('modelValue changed:', newValue)
+})
 </script>
 
 <template>
-  <div class="around" ref="button" :style="{
-    '--hmi-radius': props.radius,
-  }"">
-    <div class="handle" :class="{ pressed: active }">
-      <div class="button-wrapper" :class="{ pressed: active }">
+  <div
+    class="around"
+    :class="{
+      active: modelValue,
+      blink: props.blink && modelValue,
+      blinkInactive: props.blinkInactive && !modelValue,
+    }"
+    ref="button"
+    :style="{
+      '--hmi-radius': props.radius,
+      '--hmi-active-color': props.activeColor || '#00ff00',
+      '--hmi-inactive-color': props.inactiveColor || '#ff0000',
+    }"
+  >
+    <div class="handle">
+      <div class="button-wrapper">
         <div class="inside">
           <slot />
         </div>
@@ -37,9 +65,22 @@ const active = ref(true)
 </template>
 
 <style scoped>
-.around {
-  --hmi-radius: 50%;
+@keyframes blink-animation {
+  0% {
+    background-color: var(--hmi-active-color);
+    background-image: radial-gradient(#fff, var(--hmi-active-color) 50%);
+  }
+  50% {
+    background-color: var(--hmi-inactive-color);
+    background-image: none;
+  }
+  100% {
+    background-color: var(--hmi-active-color);
+    background-image: radial-gradient(#fff, var(--hmi-active-color) 50%);
+  }
+}
 
+.around {
   vertical-align: top;
   box-sizing: border-box;
 
@@ -79,11 +120,11 @@ const active = ref(true)
       justify-content: center;
       align-items: center;
       border-radius: var(--hmi-radius);
-      background-image: linear-gradient(180deg, #2a2a2a, #525252);
+      background: linear-gradient(180deg, #2a2a2a, #525252);
       /* background-image: radial-gradient(transparent 30%, rgba(101, 0, 0, 0.7) 70%); */
 
       cursor: pointer;
-            /* 防止触摸屏点击显示元素范围半透明黑色背景 */
+      /* 防止触摸屏点击显示元素范围半透明黑色背景 */
       -webkit-tap-highlight-color: transparent;
 
       box-shadow:
@@ -111,8 +152,7 @@ const active = ref(true)
         padding: 4px;
         position: relative;
         border-radius: var(--hmi-radius);
-        background-image: linear-gradient(#2a2a2a, #525252);
-
+        background: var(--hmi-inactive-color);
         box-shadow:
           0 0 10px rgba(255, 255, 255, 0.5),
           inset 0 8px 10px rgba(0, 0, 0, 0.18),
@@ -124,7 +164,7 @@ const active = ref(true)
           background 0.05s ease;
       }
 
-            .inside::after {
+      .inside::after {
         content: '';
         position: absolute;
         top: 0;
@@ -155,16 +195,36 @@ const active = ref(true)
         );
         background-size: 100% 4px;
       }
+    }
+  }
 
-      &.pressed {
+  &.blink {
+    .handle {
+      .button-wrapper {
         .inside {
-          background-image: radial-gradient(#fff, #ff1818 50%);
+          animation: blink-animation 0.5s infinite;
         }
       }
     }
+  }
 
-    &.pressed {
+  &.blinkInactive {
+    .handle {
+      .button-wrapper {
+        .inside {
+          animation: blink-animation 0.5s infinite;
+        }
+      }
+    }
+  }
 
+  &.active {
+    .handle {
+      .button-wrapper {
+        .inside {
+          background-image: radial-gradient(#fff, var(--hmi-active-color) 50%);
+        }
+      }
     }
   }
 }

@@ -152,7 +152,7 @@ const b1 = useClick(button, props)
       0 10px 10px #0003,
       inset 0 0 10px #000000d9,
       inset 0 0 14px #000000bf,
-      inset 0 0 48px #0003;
+      inset 0 0 28px #0003;
 
     .hmi-button-button-wrapper {
       position: relative;
@@ -169,12 +169,12 @@ const b1 = useClick(button, props)
       -webkit-tap-highlight-color: transparent;
 
       box-shadow:
-        0 9px 14px rgba(0, 0, 0, 0.5),
-        0 19px 8px -2px rgba(0, 0, 0, 0.2),
-        0 33px 8px rgba(0, 0, 0, 0.4),
-        0 -12px 10px rgba(255, 255, 255, 0.2),
-        inset 0 3px 3px rgba(255, 255, 255, 0.6),
-        inset 0 -3px 3px rgba(89, 91, 92, 0.6);
+        0 6px 14px #00000080,
+        0 8px 8px -2px #0003,
+        0 25px 8px #0006,
+        0 -12px 10px #fff3,
+        inset 0 3px 3px #fff9,
+        inset 0 -3px 3px #595b5c99;
 
       transition:
         transform 0.15s ease,
