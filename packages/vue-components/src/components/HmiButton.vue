@@ -163,7 +163,7 @@ const b1 = useClick(button, props)
       display: grid;
       place-items: center;
       border-radius: var(--hmi-radius);
-      background-image: linear-gradient(#fcf9f6, #e2d8d7);
+      background-image: linear-gradient(#f5f5f5, #c4c4c4);
       cursor: pointer;
       /* 防止触摸屏点击显示元素范围半透明黑色背景 */
       -webkit-tap-highlight-color: transparent;
@@ -216,11 +216,8 @@ const b1 = useClick(button, props)
         display: flex;
         justify-content: center;
         align-items: center;
-        background-image: linear-gradient(#e8e4e1, #d1c8c7);
-        box-shadow:
-          0 0 2px #000,
-          inset 0px 5px 10px #0000003d,
-          inset 0 -5px 10px #ffffff;
+        background-image: linear-gradient(#dcdcdc, #fcfcfc);
+        box-shadow: 0 -2px 5px #ffffff;
         position: relative;
         margin: 8px;
         flex: 1;
@@ -250,6 +247,13 @@ const b1 = useClick(button, props)
 
     .hmi-button-handle {
       .hmi-button-button-wrapper {
+        .hmi-button-inside {
+          box-shadow:
+            0 0 2px #000,
+            inset 0px 5px 10px #0000003d,
+            inset 0 -5px 10px #ffffff;
+        }
+
         /* ----------------------------------------------------------------------------网格 */
         .hmi-button-light-mesh::after,
         .hmi-button-light-mesh::before {

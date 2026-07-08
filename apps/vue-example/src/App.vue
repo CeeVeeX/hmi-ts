@@ -9,27 +9,27 @@ import {
   HmiSwitch,
   HmiCard,
 } from '@hmi-ts/vue-components'
+import { useLocalStorage } from '@vueuse/core'
 
-const radius = ref(10)
-const radiusUnit = ref('px')
-const handlePadding = ref(4)
-const handlePaddingUnit = ref('px')
-const wrapperPadding = ref(2)
-const wrapperPaddingUnit = ref('px')
-const insidePadding = ref(4)
-const insidePaddingUnit = ref('px')
+const radius = useLocalStorage('radius', 10)
+const radiusUnit = useLocalStorage('radiusUnit', 'px')
+const handlePadding = useLocalStorage('handlePadding', 4)
+const handlePaddingUnit = useLocalStorage('handlePaddingUnit', 'px')
+const wrapperPadding = useLocalStorage('wrapperPadding', 2)
+const wrapperPaddingUnit = useLocalStorage('wrapperPaddingUnit', 'px')
+const insidePadding = useLocalStorage('insidePadding', 4)
+const insidePaddingUnit = useLocalStorage('insidePaddingUnit', 'px')
 
-const radiusSize = computed(() => radius.value + radiusUnit.value)
-const inside = ref(false)
-const light = ref<'ring' | 'inner' | null | ''>('')
-const longPress = ref(2000)
-const longPressDisabled = ref(true)
-const latching = ref(false)
-const triggerCount = ref(1)
-const countReset = ref(1000)
+const inside = useLocalStorage('inside', false)
+const light = useLocalStorage<'ring' | 'inner' | null | ''>('light', '')
+const longPress = useLocalStorage('longPress', 2000)
+const longPressDisabled = useLocalStorage('longPressDisabled', true)
+const latching = useLocalStorage('latching', false)
+const triggerCount = useLocalStorage('triggerCount', 1)
+const countReset = useLocalStorage('countReset', 1000)
 
 const options = computed(() => ({
-  radius: radiusSize.value,
+  radius: radius.value + radiusUnit.value,
   inside: inside.value,
   light: light.value,
   longPress: longPressDisabled.value ? undefined : longPress.value,
@@ -41,8 +41,8 @@ const options = computed(() => ({
   insidePadding: insidePadding.value + insidePaddingUnit.value,
 }))
 
-const statusLightActive = ref(false)
-const statusLightOptions = reactive({
+const statusLightActive = useLocalStorage('statusLightActive', false)
+const statusLightOptions = useLocalStorage('statusLightOptions', {
   radius: '50%',
   activeColor: '#db1010',
   inactiveColor: '#444444',

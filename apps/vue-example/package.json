@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hmi-ts/vue-components": "workspace:*",
+    "@vueuse/core": "^14.3.0",
     "vue": "^3.5.0"
   },
   "devDependencies": {
