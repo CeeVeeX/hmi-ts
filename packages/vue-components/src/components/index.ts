@@ -5,5 +5,15 @@ import HmiRange from './HmiRange.vue'
 import HmiRadio from './HmiRadio.vue'
 import HmiSwitch from './HmiSwitch.vue'
 import HmiCard from './HmiCard.vue'
+import HmiThermometer from './HmiThermometer.vue'
 
-export { HmiButton, HmiStatusLight, HmiInput, HmiRange, HmiRadio, HmiSwitch, HmiCard }
+export {
+  HmiButton,
+  HmiStatusLight,
+  HmiInput,
+  HmiRange,
+  HmiRadio,
+  HmiSwitch,
+  HmiCard,
+  HmiThermometer,
+}
