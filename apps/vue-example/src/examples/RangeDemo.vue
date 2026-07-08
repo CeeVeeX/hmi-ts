@@ -84,7 +84,7 @@ watch(
 </script>
 
 <template>
-  <HmiCard mt-10px>
+  <HmiCard mt-10px theme="light">
     <template #title>滑块</template>
     <div flex justify-between gap-20px>
       <div>
