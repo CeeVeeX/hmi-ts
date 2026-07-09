@@ -6,17 +6,19 @@ import RangeDemo from './examples/RangeDemo.vue'
 import StatusLightDemo from './examples/StatusLightDemo.vue'
 import SwitchDemo from './examples/SwitchDemo.vue'
 import ThermometerDemo from './examples/ThermometerDemo.vue'
+import KeyboardDemo from './examples/KeyboardDemo.vue'
 </script>
 
 <template>
   <div class="app">
-    <ButtonDemo />
-    <RangeDemo />
-    <ThermometerDemo />
-    <StatusLightDemo />
-    <InputDemo />
-    <RadioDemo />
-    <SwitchDemo />
+    <KeyboardDemo></KeyboardDemo>
+    <ButtonDemo mt-10px />
+    <RangeDemo mt-10px />
+    <ThermometerDemo mt-10px />
+    <StatusLightDemo mt-10px />
+    <InputDemo mt-10px />
+    <RadioDemo mt-10px />
+    <SwitchDemo mt-10px />
   </div>
 </template>
 

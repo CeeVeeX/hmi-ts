@@ -3,7 +3,7 @@ import { HmiCardPanel, HmiSwitch } from '@hmi-ts/vue-components'
 </script>
 
 <template>
-  <HmiCardPanel mt-10px>
+  <HmiCardPanel>
     <template #title>开关</template>
     <HmiSwitch />
   </HmiCardPanel>

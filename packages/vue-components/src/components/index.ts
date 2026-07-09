@@ -7,6 +7,9 @@ import HmiSwitch from './HmiSwitch.vue'
 import HmiCardPanel from './HmiCardPanel.vue'
 import HmiCardScreen from './HmiCardScreen.vue'
 import HmiThermometer from './HmiThermometer.vue'
+import HmiKeyboard from './HmiKeyboard.vue'
+
+export * from '../types'
 
 export {
   HmiButton,
@@ -18,4 +21,5 @@ export {
   HmiCardPanel,
   HmiCardScreen,
   HmiThermometer,
+  HmiKeyboard,
 }

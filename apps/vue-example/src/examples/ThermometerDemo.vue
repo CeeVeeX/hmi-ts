@@ -40,7 +40,7 @@ watch(
 </script>
 
 <template>
-  <HmiCardPanel mt-10px>
+  <HmiCardPanel>
     <template #title>温度计</template>
 
     <div flex justify-between gap-20px>
