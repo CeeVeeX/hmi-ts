@@ -12,31 +12,50 @@ const props = withDefaults(
      * 键盘类型
      * full: 完整键盘（QWERTY + 数字）
      * number: 数字键盘
+     * hmi: HMI专用数字键盘（适合工业触摸屏）
      * custom: 自定义键盘
      */
-    layout?: 'full' | 'number' | 'custom'
+    layout?: 'full' | 'number' | 'hmi' | 'custom'
     /**
      * 自定义键盘布局
      */
     customLayout?: KeyItem[][]
     /**
-     * 按键的圆角大小，默认 6px
+     * 按键的圆角大小，默认 8px
      */
     radius?: string
     /**
-     * 按键宽度，默认 36px
+     * 按键宽度，默认 48px（HMI优化为触摸屏）
      */
     keyWidth?: string
     /**
-     * 按键高度，默认 36px
+     * 按键高度，默认 48px（HMI优化为触摸屏）
      */
     keyHeight?: string
+    /**
+     * 最大输入位数（用于限制输入长度）
+     */
+    maxLength?: number
+    /**
+     * 数值最小值（用于数字键盘验证）
+     */
+    min?: number
+    /**
+     * 数值最大值（用于数字键盘验证）
+     */
+    max?: number
+    /**
+     * 小数点位数（0表示不允许小数点）
+     */
+    decimalPlaces?: number
   }>(),
   {
     layout: 'full',
-    radius: '6px',
-    keyWidth: '36px',
-    keyHeight: '36px',
+    radius: '8px',
+    keyWidth: '48px',
+    keyHeight: '48px',
+    maxLength: 15,
+    decimalPlaces: 2,
   },
 )
 
@@ -44,6 +63,7 @@ const emit = defineEmits<{
   input: [key: string]
   backspace: []
   enter: []
+  validate: [value: string, valid: boolean, reason?: string]
 }>()
 
 // 完整键盘布局
@@ -123,12 +143,44 @@ const numberLayout: KeyItem[][] = [
   ],
 ]
 
+// HMI专用键盘布局（适合工业触摸屏）
+const hmiLayout: KeyItem[][] = [
+  [
+    { label: '1', value: '1' },
+    { label: '2', value: '2' },
+    { label: '3', value: '3' },
+    { label: 'DEL', value: 'backspace', type: 'function' },
+  ],
+  [
+    { label: '4', value: '4' },
+    { label: '5', value: '5' },
+    { label: '6', value: '6' },
+    { label: '+', value: '+' },
+  ],
+  [
+    { label: '7', value: '7' },
+    { label: '8', value: '8' },
+    { label: '9', value: '9' },
+    { label: '-', value: '-' },
+  ],
+  [
+    { label: '0', value: '0' },
+    { label: '.', value: '.' },
+    { label: 'CLR', value: 'clear', type: 'function' },
+    { label: 'OK', value: 'enter', type: 'function' },
+  ],
+]
+
 const activeKey = ref<string | null>(null)
 const pressedKeys = ref<Set<string>>(new Set())
+let currentInputValue = ''
 
 const currentLayout = computed<KeyItem[][]>(() => {
   if (props.layout === 'custom' && props.customLayout) {
     return props.customLayout
+  }
+  if (props.layout === 'hmi') {
+    return hmiLayout
   }
   if (props.layout === 'number') {
     return numberLayout
@@ -136,16 +188,75 @@ const currentLayout = computed<KeyItem[][]>(() => {
   return fullLayout
 })
 
+/**
+ * 验证输入值是否符合约束条件
+ */
+const validateInput = (newValue: string, key: string): { valid: boolean; reason?: string } => {
+  // 检查位数限制
+  if (newValue.length > props.maxLength!) {
+    return { valid: false, reason: '超过最大位数限制' }
+  }
+
+  // 对于数字键盘，进行额外验证
+  if (props.layout === 'number' || props.layout === 'hmi') {
+    // 检查小数点
+    if (key === '.' && props.decimalPlaces === 0) {
+      return { valid: false, reason: '不允许输入小数点' }
+    }
+    if (key === '.' && newValue.includes('.')) {
+      return { valid: false, reason: '只允许一个小数点' }
+    }
+
+    // 如果设置了小数位数限制，检查小数位数
+    if (props.decimalPlaces! > 0 && newValue.includes('.')) {
+      const [, decimal] = newValue.split('.')
+      if (decimal && decimal.length > props.decimalPlaces) {
+        return { valid: false, reason: `最多允许${props.decimalPlaces}位小数` }
+      }
+    }
+
+    // 检查数值范围
+    if (props.min !== undefined || props.max !== undefined) {
+      const numValue = parseFloat(newValue)
+      if (!Number.isNaN(numValue)) {
+        if (props.min !== undefined && numValue < props.min) {
+          return { valid: false, reason: `最小值为${props.min}` }
+        }
+        if (props.max !== undefined && numValue > props.max) {
+          return { valid: false, reason: `最大值为${props.max}` }
+        }
+      }
+    }
+  }
+
+  return { valid: true }
+}
+
 const handleKeyDown = (key: KeyItem) => {
   pressedKeys.value.add(key.value)
   activeKey.value = key.value
 
   if (key.value === 'backspace') {
+    currentInputValue = currentInputValue.slice(0, -1)
     emit('backspace')
+    emit('validate', currentInputValue, true)
   } else if (key.value === 'enter') {
     emit('enter')
+  } else if (key.value === 'clear') {
+    currentInputValue = ''
+    emit('input', '') // 发送清空信号
+    emit('validate', '', true)
   } else {
-    emit('input', key.value)
+    const newValue = currentInputValue + key.value
+    const validation = validateInput(newValue, key.value)
+
+    if (validation.valid) {
+      currentInputValue = newValue
+      emit('input', key.value)
+      emit('validate', currentInputValue, true)
+    } else {
+      emit('validate', currentInputValue, false, validation.reason)
+    }
   }
 }
 
@@ -169,6 +280,27 @@ const getKeyStyle = (key: KeyItem) => {
 const isKeyActive = (keyValue: string) => {
   return pressedKeys.value.has(keyValue)
 }
+
+/**
+ * 暴露给父组件的方法
+ */
+const resetInput = () => {
+  currentInputValue = ''
+}
+
+const setInputValue = (value: string) => {
+  currentInputValue = value
+}
+
+const getInputValue = () => {
+  return currentInputValue
+}
+
+defineExpose({
+  resetInput,
+  setInputValue,
+  getInputValue,
+})
 </script>
 
 <template>
@@ -199,17 +331,17 @@ const isKeyActive = (keyValue: string) => {
 
 <style scoped>
 .hmi-keyboard {
-  display: inline-flex;
-  flex-direction: column;
   gap: var(--keyboard-gap);
-  padding: 12px;
-  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
-  border-radius: 12px;
-  box-shadow:
-    inset 0 2px 5px rgba(0, 0, 0, 0.5),
-    0 10px 30px rgba(0, 0, 0, 0.8),
-    0 0 30px rgba(0, 195, 255, 0.2);
   user-select: none;
+  background: linear-gradient(135deg, #dfdfdf 0%, #acacac 100%);
+  border-radius: 12px;
+  flex-direction: column;
+  padding: 16px;
+  display: inline-flex;
+  box-shadow:
+    inset 0 2px 5px #00000080,
+    0 10px 30px #000c,
+    0 0 30px #fff3;
 }
 
 .keyboard-row {
@@ -223,9 +355,9 @@ const isKeyActive = (keyValue: string) => {
   height: var(--key-height);
   border: none;
   border-radius: var(--key-radius);
-  background: linear-gradient(180deg, #4a4a4a 0%, #2a2a2a 100%);
+  background: linear-gradient(#565a60 0%, #2f343b 100%);
   color: #e0e0e0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   position: relative;
@@ -238,6 +370,8 @@ const isKeyActive = (keyValue: string) => {
     0 0 10px rgba(0, 195, 255, 0.1);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 
   &:hover:not(.keyboard-key-active) {
     background: linear-gradient(180deg, #555555 0%, #303030 100%);
@@ -290,7 +424,7 @@ const isKeyActive = (keyValue: string) => {
 
     .key-label {
       color: #00c3ff;
-      font-size: 11px;
+      font-size: 13px;
     }
   }
 

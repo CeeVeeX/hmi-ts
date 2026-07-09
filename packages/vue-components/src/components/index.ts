@@ -8,6 +8,7 @@ import HmiCardPanel from './HmiCardPanel.vue'
 import HmiCardScreen from './HmiCardScreen.vue'
 import HmiThermometer from './HmiThermometer.vue'
 import HmiKeyboard from './HmiKeyboard.vue'
+import HmiGauge from './HmiGauge.vue'
 
 export * from '../types'
 
@@ -22,4 +23,5 @@ export {
   HmiCardScreen,
   HmiThermometer,
   HmiKeyboard,
+  HmiGauge,
 }

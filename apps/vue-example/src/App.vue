@@ -7,11 +7,13 @@ import StatusLightDemo from './examples/StatusLightDemo.vue'
 import SwitchDemo from './examples/SwitchDemo.vue'
 import ThermometerDemo from './examples/ThermometerDemo.vue'
 import KeyboardDemo from './examples/KeyboardDemo.vue'
+import GaugeDemo from './examples/GaugeDemo.vue'
 </script>
 
 <template>
   <div class="app">
     <KeyboardDemo></KeyboardDemo>
+    <GaugeDemo mt-10px />
     <ButtonDemo mt-10px />
     <RangeDemo mt-10px />
     <ThermometerDemo mt-10px />
