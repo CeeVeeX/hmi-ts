@@ -67,6 +67,7 @@ const props = withDefaults(
     --bolt-slot: #d6dbe3;
     --title-color: #e2e7f0;
     --title-shadow: #1f242d;
+    color: #fff;
   }
 }
 
@@ -82,6 +83,7 @@ const props = withDefaults(
   --bolt-slot: #d6dbe3;
   --title-color: #e2e7f0;
   --title-shadow: #1f242d;
+  color: #fff;
 }
 
 /* --- 拉丝金属面板 --- */
@@ -92,7 +94,7 @@ const props = withDefaults(
   z-index: 2;
   display: flex;
   flex-direction: column;
-  padding: 40px;
+  padding: 30px;
   /* box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.8),
     0 -2px 10px rgba(0, 0, 0, 0.5); */

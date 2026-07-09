@@ -258,6 +258,7 @@ function onPointerUp(event: PointerEvent) {
   align-items: center;
   user-select: none;
   color: #454545;
+  margin-bottom: calc(var(--bulb-size) / 2 + 4px);
 }
 
 .hmi-thermometer.is-disabled {
@@ -426,7 +427,7 @@ function onPointerUp(event: PointerEvent) {
 .hmi-thermometer-scale .label {
   position: absolute;
   font-size: 12px;
-  color: #4d4d4d;
+  color: #808080;
   transform: translateY(50%);
 }
 

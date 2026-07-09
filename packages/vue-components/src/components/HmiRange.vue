@@ -554,11 +554,12 @@ function onThumbKeydown(event: KeyboardEvent, thumb: 'start' | 'end') {
   border-radius: 50%;
   background-image: linear-gradient(180deg, #eff1f1, #86969c);
   box-shadow:
-    0 0 2px #000000,
-    0 6px 8px #00000052,
-    inset 0 0 6px #0000008c,
-    inset 0 0 4px #00000073,
-    inset 0 0 8px #0000004d;
+    0 0px 6px #00000080,
+    0 0px 2px -2px #0003,
+    0 0px 15px #0006,
+    0 -12px 10px #fff3,
+    inset 0 3px 3px #fff9,
+    inset 0 -3px 3px #595b5c99;
   cursor: grab;
   transition:
     transform 0.15s ease,

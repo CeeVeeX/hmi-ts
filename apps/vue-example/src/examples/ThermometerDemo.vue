@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import { HmiCard, HmiThermometer } from '@hmi-ts/vue-components'
+import { HmiCardPanel, HmiThermometer, HmiCardScreen } from '@hmi-ts/vue-components'
 import { useLocalStorage } from '@vueuse/core'
 
 const thermoMin = useLocalStorage('thermoMin', -20)
@@ -40,53 +40,55 @@ watch(
 </script>
 
 <template>
-  <HmiCard mt-10px>
+  <HmiCardPanel mt-10px>
     <template #title>温度计</template>
 
     <div flex justify-between gap-20px>
-      <div>
+      <HmiCardScreen>
         <div>
-          最小值
-          <input type="number" v-model.number="thermoMin" />
-        </div>
-        <div>
-          最大值
-          <input type="number" v-model.number="thermoMax" />
-        </div>
-        <div>
-          步进
-          <input type="number" min="0.1" step="0.1" v-model.number="thermoStep" />
-        </div>
-        <div>
-          当前值
-          <input type="number" v-model.number="thermoValue" />
-        </div>
-        <div>
-          单位
-          <input type="text" v-model="thermoUnit" />
-        </div>
-        <div>
-          主刻度间隔
-          <input type="number" min="1" v-model.number="thermoMajorEvery" />
-        </div>
+          <div>
+            最小值
+            <input type="number" v-model.number="thermoMin" />
+          </div>
+          <div>
+            最大值
+            <input type="number" v-model.number="thermoMax" />
+          </div>
+          <div>
+            步进
+            <input type="number" min="0.1" step="0.1" v-model.number="thermoStep" />
+          </div>
+          <div>
+            当前值
+            <input type="number" v-model.number="thermoValue" />
+          </div>
+          <div>
+            单位
+            <input type="text" v-model="thermoUnit" />
+          </div>
+          <div>
+            主刻度间隔
+            <input type="number" min="1" v-model.number="thermoMajorEvery" />
+          </div>
 
-        <div>
-          刻度
-          <input type="checkbox" v-model="thermoTicks" />
+          <div>
+            刻度
+            <input type="checkbox" v-model="thermoTicks" />
+          </div>
+          <div>
+            标签
+            <input type="checkbox" v-model="thermoShowLabels" />
+          </div>
+          <div>
+            可交互
+            <input type="checkbox" v-model="thermoInteractive" />
+          </div>
+          <div>
+            禁用
+            <input type="checkbox" v-model="thermoDisabled" />
+          </div>
         </div>
-        <div>
-          标签
-          <input type="checkbox" v-model="thermoShowLabels" />
-        </div>
-        <div>
-          可交互
-          <input type="checkbox" v-model="thermoInteractive" />
-        </div>
-        <div>
-          禁用
-          <input type="checkbox" v-model="thermoDisabled" />
-        </div>
-      </div>
+      </HmiCardScreen>
 
       <div>
         <HmiThermometer
@@ -103,5 +105,5 @@ watch(
         />
       </div>
     </div>
-  </HmiCard>
+  </HmiCardPanel>
 </template>

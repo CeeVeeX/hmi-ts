@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { HmiCard, HmiSwitch } from '@hmi-ts/vue-components'
+import { HmiCardPanel, HmiSwitch } from '@hmi-ts/vue-components'
 </script>
 
 <template>
-  <HmiCard mt-10px>
+  <HmiCardPanel mt-10px>
     <template #title>开关</template>
     <HmiSwitch />
-  </HmiCard>
+  </HmiCardPanel>
 </template>

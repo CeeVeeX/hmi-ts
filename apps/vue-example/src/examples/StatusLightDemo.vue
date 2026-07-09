@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { HmiCard, HmiStatusLight } from '@hmi-ts/vue-components'
+import { HmiCardPanel, HmiStatusLight, HmiCardScreen } from '@hmi-ts/vue-components'
 import { useLocalStorage } from '@vueuse/core'
 
 const statusLightActive = useLocalStorage('statusLightActive', false)
@@ -13,26 +13,29 @@ const statusLightOptions = useLocalStorage('statusLightOptions', {
 </script>
 
 <template>
-  <HmiCard mt-10px>
+  <HmiCardPanel mt-10px>
     <template #title>指示灯</template>
 
     <div flex justify-between>
-      <div>
+      <HmiCardScreen>
         <div>
-          激活灯光
-          <input type="checkbox" v-model="statusLightActive" />
-        </div>
+          <div>
+            激活灯光
+            <input type="checkbox" v-model="statusLightActive" />
+          </div>
 
-        <div>
-          激活时闪烁
-          <input type="checkbox" v-model="statusLightOptions.blink" />
-        </div>
+          <div>
+            激活时闪烁
+            <input type="checkbox" v-model="statusLightOptions.blink" />
+          </div>
 
-        <div>
-          非激活时闪烁
-          <input type="checkbox" v-model="statusLightOptions.blinkInactive" />
+          <div>
+            非激活时闪烁
+            <input type="checkbox" v-model="statusLightOptions.blinkInactive" />
+          </div>
         </div>
-      </div>
+      </HmiCardScreen>
+
       <div>
         <HmiStatusLight
           v-model="statusLightActive"
@@ -47,5 +50,5 @@ const statusLightOptions = useLocalStorage('statusLightOptions', {
         />
       </div>
     </div>
-  </HmiCard>
+  </HmiCardPanel>
 </template>

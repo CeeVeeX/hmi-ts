@@ -4,7 +4,8 @@ import HmiInput from './HmiInput.vue'
 import HmiRange from './HmiRange.vue'
 import HmiRadio from './HmiRadio.vue'
 import HmiSwitch from './HmiSwitch.vue'
-import HmiCard from './HmiCard.vue'
+import HmiCardPanel from './HmiCardPanel.vue'
+import HmiCardScreen from './HmiCardScreen.vue'
 import HmiThermometer from './HmiThermometer.vue'
 
 export {
@@ -14,6 +15,7 @@ export {
   HmiRange,
   HmiRadio,
   HmiSwitch,
-  HmiCard,
+  HmiCardPanel,
+  HmiCardScreen,
   HmiThermometer,
 }

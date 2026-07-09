@@ -33,5 +33,6 @@ body {
   color: #101010;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  padding: 20px;
 }
 </style>

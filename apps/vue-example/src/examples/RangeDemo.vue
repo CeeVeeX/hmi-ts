@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { HmiCard, HmiRange } from '@hmi-ts/vue-components'
+import { HmiCardPanel, HmiRange, HmiCardScreen } from '@hmi-ts/vue-components'
 import { useLocalStorage } from '@vueuse/core'
 
 const sliderMin = useLocalStorage('sliderMin', 0)
@@ -84,10 +84,10 @@ watch(
 </script>
 
 <template>
-  <HmiCard mt-10px theme="light">
+  <HmiCardPanel mt-10px theme="light">
     <template #title>滑块</template>
     <div flex justify-between gap-20px>
-      <div>
+      <HmiCardScreen theme="light">
         <div>
           最小值
           <input type="number" v-model.number="sliderMin" />
@@ -136,7 +136,7 @@ watch(
 
         <div v-if="!sliderRangeMode">当前值: {{ sliderValue }}</div>
         <div v-else>当前范围: [{{ sliderRangeValue[0] }}, {{ sliderRangeValue[1] }}]</div>
-      </div>
+      </HmiCardScreen>
 
       <div flex gap-20px>
         <div>
@@ -167,5 +167,5 @@ watch(
         </div>
       </div>
     </div>
-  </HmiCard>
+  </HmiCardPanel>
 </template>

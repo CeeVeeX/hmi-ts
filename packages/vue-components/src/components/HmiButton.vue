@@ -101,6 +101,7 @@ const b1 = useClick(button, props)
 
 <style scoped>
 .hmi-button {
+  color: #000;
   position: relative;
   vertical-align: top;
   box-sizing: border-box;
