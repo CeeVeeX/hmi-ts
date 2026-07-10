@@ -120,6 +120,7 @@ export class Mc4ePacketFactory<
 
     try {
       const parsed = parseResponseFrame(data)
+      console.log('parsed response:', parsed)
       const code = mapEndCode(parsed.endCode)
 
       if (isReadOptions(requestOptions)) {

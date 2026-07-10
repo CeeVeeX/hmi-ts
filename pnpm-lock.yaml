@@ -62,6 +62,9 @@ importers:
       '@hmi-ts/debug-agent':
         specifier: workspace:*
         version: link:../../packages/debug-agent
+      '@hmi-ts/protocol-mc-4e':
+        specifier: workspace:*
+        version: link:../../packages/protocol-mc-4e
       '@hmi-ts/protocol-modbus-tcp':
         specifier: workspace:*
         version: link:../../packages/protocol-modbus-tcp

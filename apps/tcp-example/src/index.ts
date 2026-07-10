@@ -1,8 +1,7 @@
-import 'dotenv/config'
 import { Client } from '@hmi-ts/client'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { ModbusTcpPacketFactory, ReadFn, WriteFn } from '@hmi-ts/protocol-modbus-tcp'
-import { decodeAsciiString, encodeAsciiBytes, encodeBits, encodeUint16 } from '@hmi-ts/codec'
+import { decodeAscii, encodeAscii, encodeBits, encodeUint16 } from '@hmi-ts/codec'
 import { ResponseCode } from '@hmi-ts/core'
 import { DebugAgent } from '@hmi-ts/debug-agent'
 
@@ -74,7 +73,7 @@ async function main(): Promise<void> {
     client.write({
       fn: WriteFn.WriteMultipleRegisters,
       start: 0,
-      value: encodeAsciiBytes('Hello, Modbus!', {
+      value: encodeAscii('Hello, Modbus!', {
         length: 16,
         padByte: 0x20,
       }),
@@ -125,13 +124,7 @@ async function main(): Promise<void> {
         return
       }
 
-      console.log(
-        `2请求耗时:`,
-        data.endAt - data.startAt,
-        'ms',
-        '数据:',
-        decodeAsciiString(data.data),
-      )
+      console.log(`2请求耗时:`, data.endAt - data.startAt, 'ms', '数据:', decodeAscii(data.data))
     },
   })
 
