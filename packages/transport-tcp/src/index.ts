@@ -60,7 +60,6 @@ export type ConnectCallback = () => void
  */
 export class TcpTransport extends EventEmitter<TransportEvent> implements Transport {
   private socket: net.Socket | null = null
-  private receiveBuffer = Buffer.alloc(0)
   private manualClose = false
   private reconnectDelay: number
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -187,21 +186,9 @@ export class TcpTransport extends EventEmitter<TransportEvent> implements Transp
   }
 
   private onSocketData(chunk: Buffer): void {
-    this.receiveBuffer = Buffer.concat([this.receiveBuffer, chunk])
-
-    while (this.receiveBuffer.length >= 7) {
-      const pduLength = this.receiveBuffer.readUInt16BE(4)
-      // MBAP 长度字段表示 UnitId+PDU 的长度，因此完整帧长度是 6 + pduLength。
-      const frameLength = 6 + pduLength
-      if (this.receiveBuffer.length < frameLength) {
-        return
-      }
-
-      const frame = this.receiveBuffer.subarray(0, frameLength)
-      this.receiveBuffer = this.receiveBuffer.subarray(frameLength)
-      const payload = new Uint8Array(frame.buffer, frame.byteOffset, frame.byteLength)
-      this.emit('message', payload)
-    }
+    // 传输层仅负责透传，不在此做协议分帧。
+    const payload = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+    this.emit('message', payload)
   }
 
   private scheduleReconnect(): void {
