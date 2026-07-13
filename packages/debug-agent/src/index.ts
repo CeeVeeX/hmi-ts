@@ -37,14 +37,14 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
     this.connection = mqtt.connect(brokerUrl || 'ws://127.0.0.1:58080', {
       username,
       password,
-      clientId: this.client.clientId || generateUUID(),
+      clientId: client.clientId,
     })
 
     const command = `command/${this.client.clientId}/#`
     const commandAll = `command/all/#`
 
     this.connection.on('connect', () => {
-      this.push('debug_agent_connected', { uuid: generateUUID(), clientId: this.client!.clientId })
+      this.push('connected', { uuid: generateUUID(), clientId: this.client!.clientId })
       console.log('Connected to MQTT broker')
       this.emit('connected')
       this.connection?.subscribe(command)
@@ -67,10 +67,12 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
 
     this.connection.on('message', (topic, message) => {
       try {
-        console.log(`Received MQTT message on topic ${topic}:`, message.toString())
         const [fn, scope, command] = topic.split('/')
-        if (fn === 'command' && (scope === this.client!.clientId || scope === 'all')) {
+
+        if (fn === 'command' && (scope === this.client!.clientId || scope === '+')) {
           const payload = JSON.parse(message.toString()) as ICommandPayload
+
+          console.log(command)
 
           switch (command) {
             case 'client_info':
@@ -117,8 +119,6 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
       return
     }
 
-    // console.log(`DebugAgent push: ${command}`, payload)
-
     const topic = `report/${this.client.clientId}/${command}`
 
     if (!this.connection || !this.connection.connected) {
@@ -142,6 +142,8 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
     if (!this.connection || !this.connection.connected) {
       return
     }
+
+    console.log(`Reporting result for uuid ${uuid} to topic ${topic}`)
 
     this.connection.publish(topic, JSON.stringify(payload))
   }
