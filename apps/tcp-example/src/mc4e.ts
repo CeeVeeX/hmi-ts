@@ -2,7 +2,8 @@ import { Client } from '@hmi-ts/client'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { Mc4ePacketFactory } from '@hmi-ts/protocol-mc-4e'
 import { DebugAgent } from '@hmi-ts/debug-agent'
-import { encodeAscii, encodeBits, encodeUint16, uint8ToHex } from '@hmi-ts/codec'
+import { uint8ToHex } from '@hmi-ts/codec'
+import { decodeInt16, decodeFloat32 } from '@hmi-ts/codec/little-endian'
 
 function retryConnect(client: Client<Mc4ePacketFactory>, delayMs = 1000): void {
   setTimeout(async () => {
@@ -32,11 +33,19 @@ async function main(): Promise<void> {
 
   const client = new Client({
     clientId: 'mc-4e-client',
-    packetFactory: new Mc4ePacketFactory(),
+    packetFactory: new Mc4ePacketFactory({
+      route: {
+        networkNo: 0x00,
+        plcNo: 0xff,
+        ioNo: 0x03ff,
+        stationNo: 0x00,
+      },
+    }),
     transport,
     debugAgent,
     maxQueueSize: 10,
-    defaultUnitId: 1,
+    // MC 3E/4E direct connection normally uses multidrop station No. 00H.
+    defaultUnitId: 0,
     defaultTimeout: 1000,
   })
 
@@ -49,8 +58,22 @@ async function main(): Promise<void> {
       length: 1,
     })
 
-    console.log('request frame:', uint8ToHex(a.options.frame))
-    console.log('response frame:', a)
+    if (a.code === 0) {
+      console.log('request frame:', uint8ToHex(a.options.frame))
+      console.log('response frame:', uint8ToHex(a.responseFrame!))
+      console.log('response data:', decodeInt16(a.data))
+    }
+
+    client.subscribe({
+      device: 'D',
+      start: 0,
+      length: 2,
+      callback: (a) => {
+        if (a.code === 0) {
+          console.log('response data:', decodeFloat32(a.data))
+        }
+      },
+    })
   })
   client.on('disconnected', () => console.log('disconnected'))
   client.on('error', (err) => console.error('error', err))
