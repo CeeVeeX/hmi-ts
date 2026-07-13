@@ -3,7 +3,7 @@ import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { Mc4ePacketFactory } from '@hmi-ts/protocol-mc-4e'
 import { DebugAgent } from '@hmi-ts/debug-agent'
 import { uint8ToHex } from '@hmi-ts/codec'
-import { decodeInt16, decodeFloat32 } from '@hmi-ts/codec/little-endian'
+import { decodeInt16, decodeFloat32, decodeInt32 } from '@hmi-ts/codec/little-endian'
 
 function retryConnect(client: Client<Mc4ePacketFactory>, delayMs = 1000): void {
   setTimeout(async () => {
@@ -71,6 +71,17 @@ async function main(): Promise<void> {
       callback: (a) => {
         if (a.code === 0) {
           console.log('response data:', decodeFloat32(a.data))
+        }
+      },
+    })
+
+    client.subscribe({
+      device: 'D',
+      start: 2,
+      length: 4,
+      callback: (a) => {
+        if (a.code === 0) {
+          console.log('response data:', decodeInt32(a.data))
         }
       },
     })
