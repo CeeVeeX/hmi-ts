@@ -6,6 +6,8 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
+      "@hmi-ts/codec": ["packages/codec/src/index.ts"],
+      "@hmi-ts/codec/*": ["packages/codec/src/*.ts"],
       "@hmi-ts/*": ["packages/*/src"]
     },
     "strict": true,
