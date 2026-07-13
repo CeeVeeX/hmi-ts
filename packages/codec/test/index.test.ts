@@ -14,7 +14,11 @@ import {
   encodeFloat64,
   decodeAscii,
   encodeAscii,
+  decodeUint16LE,
+  encodeUint16LE,
 } from '../src/index'
+import * as bigEndian from '../src/big-endian'
+import * as littleEndian from '../src/little-endian'
 
 describe('Codec', () => {
   it('should encode and decode boolean', () => {
@@ -50,6 +54,19 @@ describe('Codec', () => {
     const encoded = encodeUint16(value)
     const decoded = decodeUint16(encoded)
     expect(decoded).toBe(value)
+  })
+
+  it('should encode and decode uint16 in little-endian', () => {
+    const value = 100
+    const encoded = encodeUint16LE(value)
+    const decoded = decodeUint16LE(encoded)
+    expect(Array.from(encoded)).toEqual([0x64, 0x00])
+    expect(decoded).toBe(value)
+  })
+
+  it('should provide endian module aliases', () => {
+    expect(bigEndian.decodeUint16(Uint8Array.of(0x00, 0x64))).toBe(100)
+    expect(littleEndian.decodeUint16(Uint8Array.of(0x64, 0x00))).toBe(100)
   })
 
   it('should encode and decode uint32', () => {

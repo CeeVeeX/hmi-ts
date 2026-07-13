@@ -273,11 +273,28 @@ export function decodeUint16(bytes: Uint8Array): number {
 }
 
 /**
+ * 把首个字按无符号 16 位整数解码（小端）。
+ */
+export function decodeUint16LE(bytes: Uint8Array): number {
+  const input = getPaddedBytes(bytes, 2)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getUint16(0, true)
+}
+
+/**
  * 将 Uint16 编码为 2 字节（大端）。
  */
 export function encodeUint16(value: number): Uint8Array {
   ensureUint16(value, 'value')
   return Uint8Array.of((value >> 8) & 0xff, value & 0xff)
+}
+
+/**
+ * 将 Uint16 编码为 2 字节（小端）。
+ */
+export function encodeUint16LE(value: number): Uint8Array {
+  ensureUint16(value, 'value')
+  return Uint8Array.of(value & 0xff, (value >> 8) & 0xff)
 }
 
 /**
@@ -295,6 +312,15 @@ export function decodeInt16(bytes: Uint8Array): number {
 }
 
 /**
+ * 把首个字按有符号 16 位整数解码（小端）。
+ */
+export function decodeInt16LE(bytes: Uint8Array): number {
+  const input = getPaddedBytes(bytes, 2)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getInt16(0, true)
+}
+
+/**
  * 将 Int16 编码为 2 字节（大端）。
  */
 export function encodeInt16(value: number): Uint8Array {
@@ -302,6 +328,17 @@ export function encodeInt16(value: number): Uint8Array {
   const out = new Uint8Array(2)
   const view = new DataView(out.buffer)
   view.setInt16(0, value)
+  return out
+}
+
+/**
+ * 将 Int16 编码为 2 字节（小端）。
+ */
+export function encodeInt16LE(value: number): Uint8Array {
+  ensureInt16(value, 'value')
+  const out = new Uint8Array(2)
+  const view = new DataView(out.buffer)
+  view.setInt16(0, value, true)
   return out
 }
 
@@ -320,6 +357,15 @@ export function decodeUint32(bytes: Uint8Array, options?: SwapOptions): number {
 }
 
 /**
+ * 将两个字解码为无符号 32 位整数（小端）。
+ */
+export function decodeUint32LE(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getUint32(0, true)
+}
+
+/**
  * 将 Uint32 编码为 4 字节。
  */
 export function encodeUint32(value: number, options?: SwapOptions): Uint8Array {
@@ -327,6 +373,17 @@ export function encodeUint32(value: number, options?: SwapOptions): Uint8Array {
   const bytes = new Uint8Array(4)
   const view = new DataView(bytes.buffer)
   view.setUint32(0, value)
+  return applySwaps(bytes, options)
+}
+
+/**
+ * 将 Uint32 编码为 4 字节（小端）。
+ */
+export function encodeUint32LE(value: number, options?: SwapOptions): Uint8Array {
+  ensureUint32(value, 'value')
+  const bytes = new Uint8Array(4)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, value, true)
   return applySwaps(bytes, options)
 }
 
@@ -345,6 +402,15 @@ export function decodeInt32(bytes: Uint8Array, options?: SwapOptions): number {
 }
 
 /**
+ * 将两个字解码为有符号 32 位整数（小端）。
+ */
+export function decodeInt32LE(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getInt32(0, true)
+}
+
+/**
  * 将 Int32 编码为 4 字节。
  */
 export function encodeInt32(value: number, options?: SwapOptions): Uint8Array {
@@ -352,6 +418,17 @@ export function encodeInt32(value: number, options?: SwapOptions): Uint8Array {
   const bytes = new Uint8Array(4)
   const view = new DataView(bytes.buffer)
   view.setInt32(0, value)
+  return applySwaps(bytes, options)
+}
+
+/**
+ * 将 Int32 编码为 4 字节（小端）。
+ */
+export function encodeInt32LE(value: number, options?: SwapOptions): Uint8Array {
+  ensureInt32(value, 'value')
+  const bytes = new Uint8Array(4)
+  const view = new DataView(bytes.buffer)
+  view.setInt32(0, value, true)
   return applySwaps(bytes, options)
 }
 
@@ -371,6 +448,15 @@ export function decodeFloat32(bytes: Uint8Array, options?: SwapOptions): number 
 }
 
 /**
+ * 将两个字解码为 Float32（小端）。
+ */
+export function decodeFloat32LE(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 4), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getFloat32(0, true)
+}
+
+/**
  * 将四个字解码为 Float64。
  *
  * @example
@@ -383,6 +469,15 @@ export function decodeFloat64(bytes: Uint8Array, options?: SwapOptions): number 
   const input = applySwaps(getPaddedBytes(bytes, 8), options)
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   return view.getFloat64(0)
+}
+
+/**
+ * 将四个字解码为 Float64（小端）。
+ */
+export function decodeFloat64LE(bytes: Uint8Array, options?: SwapOptions): number {
+  const input = applySwaps(getPaddedBytes(bytes, 8), options)
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  return view.getFloat64(0, true)
 }
 
 /**
@@ -401,6 +496,16 @@ export function encodeFloat32(value: number, options?: SwapOptions): Uint8Array 
 }
 
 /**
+ * 把 Float32 编码为两个字（小端）。
+ */
+export function encodeFloat32LE(value: number, options?: SwapOptions): Uint8Array {
+  const bytes = new Uint8Array(4)
+  const view = new DataView(bytes.buffer)
+  view.setFloat32(0, value, true)
+  return applySwaps(bytes, options)
+}
+
+/**
  * 把 Float64 编码为四个字。
  *
  * @example
@@ -412,6 +517,16 @@ export function encodeFloat64(value: number, options?: SwapOptions): Uint8Array 
   const bytes = new Uint8Array(8)
   const view = new DataView(bytes.buffer)
   view.setFloat64(0, value)
+  return applySwaps(bytes, options)
+}
+
+/**
+ * 把 Float64 编码为四个字（小端）。
+ */
+export function encodeFloat64LE(value: number, options?: SwapOptions): Uint8Array {
+  const bytes = new Uint8Array(8)
+  const view = new DataView(bytes.buffer)
+  view.setFloat64(0, value, true)
   return applySwaps(bytes, options)
 }
 
