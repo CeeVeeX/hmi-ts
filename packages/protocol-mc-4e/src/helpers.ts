@@ -160,6 +160,11 @@ export function parseResponseFrame(frame: Uint8Array): ParsedResponse {
     throw new Error(`invalid MC 4E response subheader: ${subHeader}`)
   }
 
+  const fixedValue = readUInt16LE(frame, 4)
+  if (fixedValue !== 0x0000) {
+    throw new Error(`invalid MC 4E response fixed field: ${fixedValue}`)
+  }
+
   const transactionId = readUInt16LE(frame, 2)
   const dataLength = readUInt16LE(frame, 11)
   const payloadStart = 13

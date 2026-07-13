@@ -32,6 +32,14 @@ export class Mc4ePacketFactory<
 > implements PacketFactory<R, W> {
   constructor(private readonly options: Mc4ePacketFactoryOptions = {}) {}
 
+  private tryGetTransactionId(response: Uint8Array): number {
+    try {
+      return this.getTransactionId(response)
+    } catch {
+      return 0
+    }
+  }
+
   getTransactionId(sequence: number): number
   getTransactionId(response: Uint8Array): number
   getTransactionId(sequence: number | Uint8Array): number {
@@ -120,7 +128,6 @@ export class Mc4ePacketFactory<
 
     try {
       const parsed = parseResponseFrame(data)
-      console.log('parsed response:', parsed)
       const code = mapEndCode(parsed.endCode)
 
       if (isReadOptions(requestOptions)) {
@@ -176,7 +183,7 @@ export class Mc4ePacketFactory<
           options: requestOptions,
           startAt: requestOptions.startAt,
           endAt,
-          transactionId: this.getTransactionId(data),
+          transactionId: this.tryGetTransactionId(data),
           method: RequestMethod.READ,
           responseFrame: data,
           code: ResponseCode.RESPONSE_INVALID,
@@ -187,7 +194,7 @@ export class Mc4ePacketFactory<
         options: requestOptions,
         startAt: requestOptions.startAt,
         endAt,
-        transactionId: this.getTransactionId(data),
+        transactionId: this.tryGetTransactionId(data),
         method: RequestMethod.WRITE,
         responseFrame: data,
         code: ResponseCode.RESPONSE_INVALID,

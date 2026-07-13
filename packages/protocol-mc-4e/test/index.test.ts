@@ -143,6 +143,32 @@ describe('Mc4ePacketFactory', () => {
     expect(rsp.code).toBe(ResponseCode.ADDR_INVALID)
   })
 
+  it('rejects response when 4E fixed field is not 0000H', () => {
+    const opt = createReadWordOptions({ start: 0, length: 1 })
+
+    const frame = new Uint8Array(15)
+    writeUInt16LE(frame, 0, Mc4eSubHeader.RESPONSE)
+    writeUInt16LE(frame, 2, 0x0001)
+    writeUInt16LE(frame, 4, 0x0001)
+    frame[6] = 0
+    frame[7] = 0xff
+    writeUInt16LE(frame, 8, 0x03ff)
+    frame[10] = 1
+    writeUInt16LE(frame, 11, 2)
+    writeUInt16LE(frame, 13, 0x0000)
+
+    const rsp = factory.decodeResponse(opt, frame)
+    expect(rsp.code).toBe(ResponseCode.RESPONSE_INVALID)
+  })
+
+  it('returns RESPONSE_INVALID for too-short frame without throwing', () => {
+    const opt = createReadWordOptions({ start: 0, length: 1 })
+
+    const rsp = factory.decodeResponse(opt, new Uint8Array([0xd4, 0x00, 0x34]))
+    expect(rsp.code).toBe(ResponseCode.RESPONSE_INVALID)
+    expect(rsp.transactionId).toBe(0)
+  })
+
   it('mergeRead should aggressively merge same device ranges within point limit', () => {
     const reqs: ReadWordOptions[] = [
       createReadWordOptions({ start: 0, length: 1 }),
