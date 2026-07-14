@@ -277,6 +277,8 @@ export class Client<T extends PacketFactory<any, any>>
   }
 
   private nextTx(): number {
-    return this.options.packetFactory.getTransactionId(++this.#sequence)
+    ++this.#sequence
+    this.emit('sequence', this.#sequence)
+    return this.options.packetFactory.getTransactionId(this.#sequence)
   }
 }

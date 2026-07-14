@@ -69,14 +69,15 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
       try {
         const [fn, scope, command] = topic.split('/')
 
-        if (fn === 'command' && (scope === this.client!.clientId || scope === '+')) {
+        if (fn === 'command' && (scope === this.client!.clientId || scope === 'all')) {
           const payload = JSON.parse(message.toString()) as ICommandPayload
 
-          console.log(command)
+          console.log(payload)
 
           switch (command) {
             case 'client_info':
-              this.report(payload.uuid, {
+              this.report(command, {
+                uuid: payload.uuid,
                 address: client.options.transport.address,
                 defaultUnitId: client.options.defaultUnitId,
                 defaultTimeout: client.options.defaultTimeout,
@@ -92,6 +93,8 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
         console.error('Failed to parse MQTT message:', error)
       }
     })
+
+    client.on('sequence', (v) => this.push('sequence', { v }))
 
     client.on('read-before', (o) => this.push('read-before', o))
     client.on('read', (r) => this.push('read', r))
@@ -131,20 +134,20 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
   /**
    * 返回指令执行结果给调试器
    */
-  report(uuid: string, payload: object) {
+  report(command: string, payload: object) {
     if (!this.client) {
       console.error('DebugAgent client is not set. Call connect() first.')
       return
     }
 
-    const topic = `report/${this.client.clientId}/${uuid}`
+    const topic = `report/${this.client.clientId}/${command}`
 
     if (!this.connection || !this.connection.connected) {
       return
     }
 
-    console.log(`Reporting result for uuid ${uuid} to topic ${topic}`)
+    console.log(`Reporting result for command ${command} to topic ${topic}`)
 
-    this.connection.publish(topic, JSON.stringify(payload))
+    this.connection.publish(topic, JSON.stringify({ ...payload, test: Math.random() }, replacer))
   }
 }

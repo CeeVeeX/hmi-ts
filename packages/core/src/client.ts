@@ -73,6 +73,7 @@ export interface ClientOptions<T extends PacketFactory> {
 
 export interface ClientEvent<T extends PacketFactory = PacketFactory> {
   // 连接事件
+  sequence: (sequence: number) => void
   connected: () => void
   disconnected: (error: Error) => void
   destroyed: (error: Error) => void
