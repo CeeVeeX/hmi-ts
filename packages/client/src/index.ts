@@ -32,11 +32,16 @@ export class Client<T extends PacketFactory<any, any>>
   extends EventEmitter<ClientEvent<T>>
   implements IClient<T>
 {
+  #name: string
   #clientId: string
   #scheduler: RequestScheduler
   #sequence = 0
   #subscriptionEngine: SubscriptionEngine<T>
   #inFlight: InFlight<T> | null = null
+
+  get name(): string {
+    return this.#name
+  }
 
   get clientId(): string {
     return this.#clientId
@@ -62,6 +67,8 @@ export class Client<T extends PacketFactory<any, any>>
     super()
 
     this.#clientId = options.clientId || generateUUID()
+
+    this.#name = options.name || this.#clientId
 
     this.#scheduler = new RequestScheduler(this.options.maxQueueSize ?? 1000)
 
@@ -123,6 +130,8 @@ export class Client<T extends PacketFactory<any, any>>
     if (this.options.debugAgent) {
       await this.options.debugAgent.connect(this)
     }
+
+    console.log(`Client ${this.name} connected, clientId: ${this.clientId}`)
   }
 
   /**

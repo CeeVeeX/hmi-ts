@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   })
 
   const client = new Client({
-    clientId: 'mc-4e-client',
+    clientId: 'mc4e-client',
     packetFactory: new Mc4ePacketFactory({
       route: {
         networkNo: 0x00,

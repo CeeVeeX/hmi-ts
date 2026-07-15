@@ -128,7 +128,9 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
       return
     }
 
-    this.connection.publish(topic, JSON.stringify(payload, replacer))
+    this.connection.publish(topic, JSON.stringify({ ...payload, t: Date.now() }, replacer), {
+      qos: 0,
+    })
   }
 
   /**
@@ -148,6 +150,8 @@ export class DebugAgent<T extends PacketFactory> extends EventEmitter implements
 
     console.log(`Reporting result for command ${command} to topic ${topic}`)
 
-    this.connection.publish(topic, JSON.stringify({ ...payload, test: Math.random() }, replacer))
+    this.connection.publish(topic, JSON.stringify({ ...payload, t: Date.now() }, replacer), {
+      qos: 0,
+    })
   }
 }

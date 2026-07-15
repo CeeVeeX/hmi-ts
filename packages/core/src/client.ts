@@ -61,6 +61,7 @@ export interface InFlight<T extends PacketFactory> {
 }
 
 export interface ClientOptions<T extends PacketFactory> {
+  name?: string
   clientId?: string
   packetFactory: T
   transport: Transport
@@ -90,6 +91,7 @@ export interface ClientEvent<T extends PacketFactory = PacketFactory> {
 }
 
 export interface IClient<T extends PacketFactory> extends EventEmitter<ClientEvent<T>> {
+  readonly name: string
   readonly clientId: string
   readonly scheduler: RequestScheduler
   readonly subscriptionEngine: SubscriptionEngine<PacketFactory>
