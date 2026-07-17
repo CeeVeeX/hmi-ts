@@ -8,6 +8,7 @@ import {
   Mc4eSubHeader,
   type ReadBitOptions,
   type ReadWordOptions,
+  type WriteBitOptions,
   type WriteWordOptions,
 } from '../src/index'
 
@@ -64,6 +65,21 @@ describe('Mc4ePacketFactory', () => {
     }
   }
 
+  function createWriteBitOptions(overrides: Partial<WriteBitOptions> = {}): WriteBitOptions {
+    return {
+      id: 0x0021,
+      unitId: 1,
+      start: 420,
+      value: Uint8Array.from([1]),
+      device: 'M',
+      frame: new Uint8Array(),
+      timeout: 1000,
+      priority: 0,
+      startAt: 0,
+      ...overrides,
+    }
+  }
+
   it('encodes read request frame for D words', () => {
     const opt = createReadWordOptions()
 
@@ -97,6 +113,21 @@ describe('Mc4ePacketFactory', () => {
     expect(frame[26]).toBe(0x12)
     expect(frame[27]).toBe(0x78)
     expect(frame[28]).toBe(0x56)
+  })
+
+  it('encodes write request frame for M bit ON', () => {
+    const opt = createWriteBitOptions()
+
+    const frame = factory.encodeWrite(opt)
+
+    expect(frame[15]).toBe(Mc4eCommand.BATCH_WRITE & 0xff)
+    expect(frame[16]).toBe((Mc4eCommand.BATCH_WRITE >> 8) & 0xff)
+    expect(frame[17]).toBe(Mc4eSubCommand.BIT & 0xff)
+    expect(frame[18]).toBe((Mc4eSubCommand.BIT >> 8) & 0xff)
+    expect(frame[22]).toBe(Mc4eDeviceCode.M)
+    expect(frame[23]).toBe(0x01)
+    expect(frame[24]).toBe(0x00)
+    expect(frame[25]).toBe(0x10)
   })
 
   it('decodes read success response', () => {
@@ -176,30 +207,80 @@ describe('Mc4ePacketFactory', () => {
       createReadWordOptions({ start: 300, length: 5 }),
     ]
 
-    const merged = factory.mergeRead(reqs) as ReadWordOptions[]
+    const merged = factory.mergeRead(reqs) as Array<ReadWordOptions & { blocks?: unknown[] }>
     expect(merged).toHaveLength(1)
-    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 305 })
+    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 8 })
+    expect(merged[0].blocks).toEqual([
+      { device: 'D', start: 0, length: 1 },
+      { device: 'D', start: 100, length: 2 },
+      { device: 'D', start: 300, length: 5 },
+    ])
   })
 
   it('mergeRead should split when word point limit is exceeded', () => {
     const reqs: ReadWordOptions[] = [
-      createReadWordOptions({ start: 0, length: 100 }),
+      createReadWordOptions({ start: 0, length: 950 }),
       createReadWordOptions({ start: 950, length: 20 }),
     ]
 
-    const merged = factory.mergeRead(reqs) as ReadWordOptions[]
+    const merged = factory.mergeRead(reqs) as Array<ReadWordOptions & { blocks?: unknown[] }>
     expect(merged).toHaveLength(2)
-    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 100 })
+    expect(merged[0]).toMatchObject({ unitId: 1, device: 'D', start: 0, length: 950 })
     expect(merged[1]).toMatchObject({ unitId: 1, device: 'D', start: 950, length: 20 })
   })
 
-  it('mergeRead should keep bit and word device groups separated', () => {
+  it('mergeRead should combine same-route bit and word requests into one block-read packet', () => {
     const reqs: Array<ReadWordOptions | ReadBitOptions> = [
       createReadWordOptions({ start: 0, length: 10 }),
       createReadBitOptions({ start: 0, length: 10 }),
     ]
 
-    const merged = factory.mergeRead(reqs)
-    expect(merged).toHaveLength(2)
+    const merged = factory.mergeRead(reqs) as Array<ReadWordOptions & { blocks?: unknown[] }>
+    expect(merged).toHaveLength(1)
+    expect(merged[0].blocks).toEqual([
+      { device: 'D', start: 0, length: 10 },
+      { device: 'M', start: 0, length: 10 },
+    ])
+  })
+
+  it('encodes merged block read request frame for discontinuous word blocks', () => {
+    const merged = factory.mergeRead([
+      createReadWordOptions({ start: 0, length: 1 }),
+      createReadWordOptions({ start: 100, length: 2 }),
+    ]) as Array<ReadWordOptions & { blocks?: unknown[] }>
+
+    const frame = factory.encodeRead(merged[0])
+
+    expect(frame[15]).toBe(Mc4eCommand.BLOCK_READ & 0xff)
+    expect(frame[16]).toBe((Mc4eCommand.BLOCK_READ >> 8) & 0xff)
+    expect(frame[17]).toBe(Mc4eSubCommand.WORD & 0xff)
+    expect(frame[18]).toBe((Mc4eSubCommand.WORD >> 8) & 0xff)
+    expect(frame[19]).toBe(0x02)
+    expect(frame[20]).toBe(0x00)
+  })
+
+  it('sliceReadResponse should extract the matching block payload from block-read response', () => {
+    const merged = factory.mergeRead([
+      createReadWordOptions({ start: 0, length: 1 }),
+      createReadWordOptions({ start: 100, length: 2 }),
+    ]) as Array<ReadWordOptions & { blocks?: unknown[] }>
+
+    const response = {
+      options: merged[0],
+      startAt: 0,
+      endAt: 1,
+      transactionId: 0x1234,
+      method: RequestMethod.READ,
+      responseFrame: new Uint8Array(),
+      code: ResponseCode.SUCCESS,
+      data: new Uint8Array([0x11, 0x22, 0xaa, 0xbb, 0xcc, 0xdd]),
+      byteCount: 6,
+    } as const
+
+    const sliced = factory.sliceReadResponse(
+      createReadWordOptions({ start: 100, length: 2 }),
+      response,
+    )
+    expect(Array.from(sliced ?? [])).toEqual([0xaa, 0xbb, 0xcc, 0xdd])
   })
 })

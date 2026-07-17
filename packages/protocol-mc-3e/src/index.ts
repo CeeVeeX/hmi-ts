@@ -150,6 +150,20 @@ function packBitValues(values: Array<number | boolean>): Uint8Array {
   return out
 }
 
+function packBitWriteValues(values: Array<number | boolean>): Uint8Array {
+  const out = new Uint8Array(Math.ceil(values.length / 2))
+  for (let i = 0; i < values.length; i += 1) {
+    const on = values[i] === true || values[i] === 1
+    const byteIndex = i >> 1
+    if ((i & 0x01) === 0) {
+      out[byteIndex] |= on ? 0x10 : 0x00
+    } else {
+      out[byteIndex] |= on ? 0x01 : 0x00
+    }
+  }
+  return out
+}
+
 function unpackBitValues(payload: Uint8Array, pointCount: number): boolean[] {
   const out: boolean[] = []
   for (let i = 0; i < pointCount; i += 1) {
@@ -259,7 +273,7 @@ function buildWriteBody(options: Mc3eWriteOptions): Uint8Array {
   }
   ensureUInt16(wordCount, 'value.length')
 
-  const payload = bit ? packBitValues(values) : options.value
+  const payload = bit ? packBitWriteValues(values) : options.value
 
   const body = new Uint8Array(10 + payload.length)
   const subcommand = bit ? Mc3eSubCommand.BIT : Mc3eSubCommand.WORD

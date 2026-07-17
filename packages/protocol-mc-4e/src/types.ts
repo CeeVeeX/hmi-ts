@@ -7,6 +7,7 @@ export enum Mc4eSubHeader {
 
 export enum Mc4eCommand {
   BATCH_READ = 0x0401,
+  BLOCK_READ = 0x0406,
   BATCH_WRITE = 0x1401,
 }
 

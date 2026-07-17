@@ -12,6 +12,16 @@ import {
   type ParsedResponse,
 } from './types'
 
+export interface Mc4eReadBlockItem {
+  device: Mc4eDevice
+  start: number
+  length: number
+}
+
+export interface Mc4eBlockReadOptions extends Mc4eReadOptions {
+  blocks: Mc4eReadBlockItem[]
+}
+
 const BIT_DEVICE_SET = new Set<Mc4eDevice>(['M', 'X', 'Y'])
 
 const DEFAULT_NETWORK_NO = 0x00
@@ -21,6 +31,7 @@ const DEFAULT_STATION_NO = 0x00
 const DEFAULT_MONITOR_TIMER = 0x0010
 const MAX_WORD_POINTS_PER_REQUEST = 960
 const MAX_BIT_POINTS_PER_REQUEST = 7168
+const MAX_BLOCKS_PER_REQUEST = 120
 
 function ensureUInt8(value: number, fieldName: string): void {
   if (!Number.isInteger(value) || value < 0 || value > 0xff) {
@@ -84,6 +95,20 @@ export function packBitValues(values: Array<number | boolean>): Uint8Array {
       out[byteIndex] |= on ? 0x01 : 0x00
     } else {
       out[byteIndex] |= on ? 0x10 : 0x00
+    }
+  }
+  return out
+}
+
+function packBitWriteValues(values: Array<number | boolean>): Uint8Array {
+  const out = new Uint8Array(Math.ceil(values.length / 2))
+  for (let i = 0; i < values.length; i += 1) {
+    const on = values[i] === true || values[i] === 1
+    const byteIndex = i >> 1
+    if ((i & 0x01) === 0) {
+      out[byteIndex] |= on ? 0x10 : 0x00
+    } else {
+      out[byteIndex] |= on ? 0x01 : 0x00
     }
   }
   return out
@@ -184,7 +209,53 @@ export function parseResponseFrame(frame: Uint8Array): ParsedResponse {
   }
 }
 
+export function isBlockReadOptions(options: Mc4eReadOptions): options is Mc4eBlockReadOptions {
+  return 'blocks' in options && Array.isArray((options as Mc4eBlockReadOptions).blocks)
+}
+
+function getBlockPayloadByteLength(block: Mc4eReadBlockItem): number {
+  return isBitDevice(block.device) ? Math.ceil(block.length / 2) : block.length * 2
+}
+
+export function normalizeBlockReadItems(blocks: Mc4eReadBlockItem[]): Mc4eReadBlockItem[] {
+  const wordBlocks = blocks.filter((block) => !isBitDevice(block.device))
+  const bitBlocks = blocks.filter((block) => isBitDevice(block.device))
+  return [...wordBlocks, ...bitBlocks]
+}
+
+function buildBlockReadBody(options: Mc4eBlockReadOptions): Uint8Array {
+  const blocks = normalizeBlockReadItems(options.blocks)
+  const wordBlocks = blocks.filter((block) => !isBitDevice(block.device))
+  const bitBlocks = blocks.filter((block) => isBitDevice(block.device))
+
+  ensureUInt8(wordBlocks.length, 'wordBlockCount')
+  ensureUInt8(bitBlocks.length, 'bitBlockCount')
+
+  const body = new Uint8Array(6 + blocks.length * 6)
+  writeUInt16LE(body, 0, Mc4eCommand.BLOCK_READ)
+  writeUInt16LE(body, 2, Mc4eSubCommand.WORD)
+  body[4] = wordBlocks.length
+  body[5] = bitBlocks.length
+
+  let offset = 6
+  for (const block of blocks) {
+    ensureUInt24(block.start, 'block.start')
+    ensureUInt16(block.length, 'block.length')
+
+    writeUInt24LE(body, offset, block.start)
+    body[offset + 3] = getDeviceCode(block.device)
+    writeUInt16LE(body, offset + 4, block.length)
+    offset += 6
+  }
+
+  return body
+}
+
 export function buildReadBody(options: Mc4eReadOptions): Uint8Array {
+  if (isBlockReadOptions(options)) {
+    return buildBlockReadBody(options)
+  }
+
   ensureUInt24(options.start, 'start')
   ensureUInt16(options.length, 'length')
 
@@ -211,7 +282,7 @@ export function buildWriteBody(options: Mc4eWriteOptions): Uint8Array {
   }
   ensureUInt16(wordCount, 'value.length')
 
-  const payload = bit ? packBitValues(values) : options.value
+  const payload = bit ? packBitWriteValues(values) : options.value
 
   const body = new Uint8Array(10 + payload.length)
   const subcommand = bit ? Mc4eSubCommand.BIT : Mc4eSubCommand.WORD
@@ -235,7 +306,6 @@ export function mergeReadOptions(options: Mc4eReadOptions[]): Mc4eReadOptions[] 
   for (const option of options) {
     const route = option.route ?? {}
     const key = [
-      option.device.toUpperCase(),
       route.networkNo ?? DEFAULT_NETWORK_NO,
       route.plcNo ?? DEFAULT_PLC_NO,
       route.ioNo ?? DEFAULT_IO_NO,
@@ -254,26 +324,55 @@ export function mergeReadOptions(options: Mc4eReadOptions[]): Mc4eReadOptions[] 
 
   for (const [, group] of grouped) {
     const sorted = [...group].sort((a, b) => a.start - b.start)
-    let current = { ...sorted[0] }
-    const maxPoints = isBitDevice(current.device)
-      ? MAX_BIT_POINTS_PER_REQUEST
-      : MAX_WORD_POINTS_PER_REQUEST
+    let currentOptions: Mc4eReadOptions[] = []
+    let currentBlocks: Mc4eReadBlockItem[] = []
+    let currentWordPoints = 0
+    let currentBitPoints = 0
 
-    for (let i = 1; i < sorted.length; i += 1) {
-      const next = sorted[i]
-      const nextEnd = next.start + next.length
-      const mergedLength = nextEnd - current.start
-
-      // MC 4E 批量读允许读取连续区间，适度“补洞”可以减少报文数。
-      if (mergedLength <= maxPoints) {
-        current.length = mergedLength
-      } else {
-        merged.push(current)
-        current = { ...next }
+    const pushCurrent = () => {
+      if (currentBlocks.length === 0 || currentOptions.length === 0) {
+        return
       }
+      const normalized = normalizeBlockReadItems(currentBlocks)
+      const first = currentOptions[0]
+      const totalLength = normalized.reduce((sum, block) => sum + block.length, 0)
+      merged.push({
+        ...first,
+        blocks: normalized,
+        start: normalized[0].start,
+        length: totalLength,
+      } as Mc4eBlockReadOptions)
     }
 
-    merged.push(current)
+    for (const option of sorted) {
+      const nextBlock: Mc4eReadBlockItem = {
+        device: option.device,
+        start: option.start,
+        length: option.length,
+      }
+      const nextWordPoints = currentWordPoints + (isBitDevice(option.device) ? 0 : option.length)
+      const nextBitPoints = currentBitPoints + (isBitDevice(option.device) ? option.length : 0)
+
+      if (
+        currentBlocks.length > 0 &&
+        (currentBlocks.length >= MAX_BLOCKS_PER_REQUEST ||
+          nextWordPoints > MAX_WORD_POINTS_PER_REQUEST ||
+          nextBitPoints > MAX_BIT_POINTS_PER_REQUEST)
+      ) {
+        pushCurrent()
+        currentOptions = []
+        currentBlocks = []
+        currentWordPoints = 0
+        currentBitPoints = 0
+      }
+
+      currentOptions.push(option)
+      currentBlocks.push(nextBlock)
+      currentWordPoints += isBitDevice(option.device) ? 0 : option.length
+      currentBitPoints += isBitDevice(option.device) ? option.length : 0
+    }
+
+    pushCurrent()
   }
 
   return merged
@@ -291,7 +390,6 @@ export function mergeSubscriptionRelations<
     const readOption = option as unknown as Mc4eReadOptions
     const route = readOption.route ?? {}
     const key = [
-      readOption.device.toUpperCase(),
       route.networkNo ?? DEFAULT_NETWORK_NO,
       route.plcNo ?? DEFAULT_PLC_NO,
       route.ioNo ?? DEFAULT_IO_NO,
@@ -310,29 +408,64 @@ export function mergeSubscriptionRelations<
 
   for (const [, group] of grouped) {
     const sorted = [...group].sort((a, b) => a.start - b.start)
-    let currentRange = { ...sorted[0] } as unknown as SubscriptionGroup<T>
-    let currentSubscriptions = [sorted[0]]
-    const maxPoints = isBitDevice((currentRange as unknown as Mc4eReadOptions).device)
-      ? MAX_BIT_POINTS_PER_REQUEST
-      : MAX_WORD_POINTS_PER_REQUEST
+    let currentSubscriptions: SubscriptionGroup<T>[] = []
+    let currentBlocks: Mc4eReadBlockItem[] = []
+    let currentWordPoints = 0
+    let currentBitPoints = 0
 
-    for (let i = 1; i < sorted.length; i += 1) {
-      const next = sorted[i] as unknown as SubscriptionGroup<T>
-      const nextEnd = next.start + next.length
-      const mergedLength = nextEnd - currentRange.start
-
-      // MC 4E 批量读允许读取连续区间，适度“补洞”可以减少报文数。
-      if (mergedLength <= maxPoints) {
-        currentRange.length = mergedLength
-        currentSubscriptions.push(sorted[i])
-      } else {
-        relations.push({ range: currentRange, subscriptions: currentSubscriptions })
-        currentRange = { ...next }
-        currentSubscriptions = [sorted[i]]
+    const pushCurrent = () => {
+      if (currentSubscriptions.length === 0 || currentBlocks.length === 0) {
+        return
       }
+
+      const normalized = normalizeBlockReadItems(currentBlocks)
+      const first = currentSubscriptions[0] as unknown as Mc4eReadOptions
+      const totalLength = normalized.reduce((sum, block) => sum + block.length, 0)
+      const range = {
+        ...currentSubscriptions[0],
+        device: normalized[0]?.device ?? first.device,
+        start: normalized[0]?.start ?? first.start,
+        length: totalLength,
+        blocks: normalized,
+      } as unknown as SubscriptionGroup<T>
+
+      relations.push({
+        range,
+        subscriptions: currentSubscriptions,
+      })
     }
 
-    relations.push({ range: currentRange, subscriptions: currentSubscriptions })
+    for (const option of sorted) {
+      const readOption = option as unknown as Mc4eReadOptions
+      const nextWordPoints =
+        currentWordPoints + (isBitDevice(readOption.device) ? 0 : readOption.length)
+      const nextBitPoints =
+        currentBitPoints + (isBitDevice(readOption.device) ? readOption.length : 0)
+
+      if (
+        currentSubscriptions.length > 0 &&
+        (currentSubscriptions.length >= MAX_BLOCKS_PER_REQUEST ||
+          nextWordPoints > MAX_WORD_POINTS_PER_REQUEST ||
+          nextBitPoints > MAX_BIT_POINTS_PER_REQUEST)
+      ) {
+        pushCurrent()
+        currentSubscriptions = []
+        currentBlocks = []
+        currentWordPoints = 0
+        currentBitPoints = 0
+      }
+
+      currentSubscriptions.push(option)
+      currentBlocks.push({
+        device: readOption.device,
+        start: readOption.start,
+        length: readOption.length,
+      })
+      currentWordPoints += isBitDevice(readOption.device) ? 0 : readOption.length
+      currentBitPoints += isBitDevice(readOption.device) ? readOption.length : 0
+    }
+
+    pushCurrent()
   }
 
   return relations

@@ -2,7 +2,7 @@ import { Client } from '@hmi-ts/client'
 import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { Mc4ePacketFactory } from '@hmi-ts/protocol-mc-4e'
 import { DebugAgent } from '@hmi-ts/debug-agent'
-import { uint8ToHex } from '@hmi-ts/codec'
+import { decodeBits, uint8ToHex } from '@hmi-ts/codec'
 import { decodeInt16, decodeFloat32, decodeInt32, encodeInt16 } from '@hmi-ts/codec/little-endian'
 
 function retryConnect(client: Client<Mc4ePacketFactory>, delayMs = 1000): void {
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
         length: 2,
         callback: (a) => {
           if (a.code === 0) {
-            console.log('response data:', decodeFloat32(a.data), '------------:' + Math.random())
+            console.log('D0 response data:', decodeFloat32(a.data))
           }
         },
       })
@@ -90,7 +90,18 @@ async function main(): Promise<void> {
         length: 4,
         callback: (a) => {
           if (a.code === 0) {
-            console.log('response data:', decodeInt32(a.data), '------------:' + Math.random())
+            console.log('D200 response data:', decodeInt32(a.data))
+          }
+        },
+      })
+
+      client.subscribe({
+        device: 'M',
+        start: 420,
+        length: 4,
+        callback: (a) => {
+          if (a.code === 0) {
+            console.log('M0 response data:', decodeBits(a.data, 4))
           }
         },
       })
@@ -108,6 +119,12 @@ async function main(): Promise<void> {
               device: 'D',
               start: 200,
               value: encodeInt16(Math.floor(Math.random() * 100)),
+            })
+
+            await client.write({
+              device: 'M',
+              start: 420,
+              value: Uint8Array.from([Math.random() > 0.5 ? 1 : 0]),
             })
           } catch (error) {
             console.error('periodic write failed:', error)

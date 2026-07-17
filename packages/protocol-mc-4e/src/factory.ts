@@ -8,11 +8,13 @@ import {
 import {
   buildReadBody,
   buildRequestFrame,
+  isBlockReadOptions,
   buildWriteBody,
   isBitDevice,
   mapEndCode,
   mergeReadOptions,
   mergeSubscriptionRelations,
+  normalizeBlockReadItems,
   packBitValues,
   parseResponseFrame,
   readUInt16LE,
@@ -97,6 +99,35 @@ export class Mc4ePacketFactory<
 
     if (rsp.code !== ResponseCode.SUCCESS) {
       return null
+    }
+
+    if (isBlockReadOptions(rsp.options as Mc4eReadOptions)) {
+      const blocks = normalizeBlockReadItems(
+        (rsp.options as Mc4eReadOptions & { blocks: Parameters<typeof normalizeBlockReadItems>[0] })
+          .blocks,
+      )
+      let offsetBytes = 0
+
+      for (const block of blocks) {
+        const isMatch =
+          block.device.toUpperCase() === req.device.toUpperCase() &&
+          block.start === req.start &&
+          block.length === req.length
+
+        if (isMatch) {
+          const endBytes =
+            offsetBytes +
+            (isBitDevice(block.device) ? Math.ceil(block.length / 2) : block.length * 2)
+          if (endBytes > rsp.data.length) {
+            throw new Error('slice range exceeds block payload')
+          }
+          return rsp.data.slice(offsetBytes, endBytes)
+        }
+
+        offsetBytes += isBitDevice(block.device) ? Math.ceil(block.length / 2) : block.length * 2
+      }
+
+      throw new Error('requested block not found in block-read response')
     }
 
     const offset = req.start - rsp.options.start
