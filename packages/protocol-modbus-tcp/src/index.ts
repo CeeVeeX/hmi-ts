@@ -21,6 +21,7 @@ import {
   encodeWriteSingleReg,
   parseModbusTcpResponse,
 } from './encode'
+import { decodePacket, type DecodedModbusTcpPacket } from './decode'
 
 export {
   ReadFn,
@@ -30,6 +31,8 @@ export {
   encodeWriteMultiRegs,
   encodeWriteSingleCoil,
   encodeWriteSingleReg,
+  decodePacket,
+  type DecodedModbusTcpPacket,
   type ReadOptions,
   type WriteOptions,
 }

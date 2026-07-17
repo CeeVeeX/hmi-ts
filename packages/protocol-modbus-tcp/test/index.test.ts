@@ -4,6 +4,7 @@ import {
   ModbusTcpPacketFactory,
   ReadFn,
   WriteFn,
+  decodePacket,
   type ReadOptions,
   type WriteOptions,
 } from '../src/index'
@@ -769,6 +770,74 @@ describe('ModbusTcpPacketFactory', () => {
 
       expect(result[10]).toBe(0x12) // 高字节在前
       expect(result[11]).toBe(0x34) // 低字节在后
+    })
+  })
+
+  describe('decodeModbusTcpPacket', () => {
+    it('应该解析读取请求报文', () => {
+      const frame = new Uint8Array([
+        0x12,
+        0x34, // transactionId
+        0x00,
+        0x00, // protocolId
+        0x00,
+        0x06, // length
+        0x01, // unitId
+        0x03, // fn
+        0x00,
+        0x64, // start
+        0x00,
+        0x0a, // quantity
+      ])
+
+      const decoded = decodePacket(frame)
+
+      expect(decoded.packetType).toBe('request')
+      expect(decoded.transactionId).toBe(0x1234)
+      expect(decoded.unitId).toBe(1)
+      expect(decoded.functionCode).toBe(0x03)
+      expect(decoded.startAddress).toBe(100)
+      expect(decoded.length).toBe(10)
+    })
+
+    it('应该解析读取响应报文', () => {
+      const frame = new Uint8Array([
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78,
+      ])
+
+      const decoded = decodePacket(frame)
+
+      expect(decoded.packetType).toBe('response')
+      expect(decoded.functionCode).toBe(0x03)
+      expect(decoded.byteCount).toBe(4)
+      expect(decoded.data).toEqual(new Uint8Array([0x12, 0x34, 0x56, 0x78]))
+    })
+
+    it('应该解析写多个寄存器请求报文', () => {
+      const frame = new Uint8Array([
+        0x00, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x01, 0x10, 0x00, 0x64, 0x00, 0x02, 0x04, 0x11, 0x22,
+        0x33, 0x44,
+      ])
+
+      const decoded = decodePacket(frame)
+
+      expect(decoded.packetType).toBe('request')
+      expect(decoded.functionCode).toBe(0x10)
+      expect(decoded.startAddress).toBe(100)
+      expect(decoded.length).toBe(2)
+      expect(decoded.byteCount).toBe(4)
+      expect(decoded.data).toEqual(new Uint8Array([0x11, 0x22, 0x33, 0x44]))
+    })
+
+    it('应该解析异常响应报文', () => {
+      const frame = new Uint8Array([0x00, 0x03, 0x00, 0x00, 0x00, 0x03, 0x01, 0x83, 0x02])
+
+      const decoded = decodePacket(frame)
+
+      expect(decoded.packetType).toBe('exception')
+      expect(decoded.functionCode).toBe(0x03)
+      expect(decoded.exceptionCode).toBe(0x02)
+      expect(decoded.exceptionMessage).toBe('非法数据地址')
     })
   })
 })

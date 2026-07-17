@@ -12,7 +12,6 @@
 
 - <a href="https://www.npmjs.com/package/@hmi-ts/client" target="__blank"><img alt="NPM Version" src="https://img.shields.io/npm/v/@modbus-ts/client?label=@hmi-ts/client"></a> high-level Modbus client
 
-
 ## Highlights
 
 - Multi-wire protocol support: TCP, RTU, ASCII
