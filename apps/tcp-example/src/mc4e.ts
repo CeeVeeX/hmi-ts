@@ -3,7 +3,7 @@ import { TcpTransport } from '@hmi-ts/transport-tcp'
 import { Mc4ePacketFactory } from '@hmi-ts/protocol-mc-4e'
 import { DebugAgent } from '@hmi-ts/debug-agent'
 import { uint8ToHex } from '@hmi-ts/codec'
-import { decodeInt16, decodeFloat32, decodeInt32 } from '@hmi-ts/codec/little-endian'
+import { decodeInt16, decodeFloat32, decodeInt32, encodeInt16 } from '@hmi-ts/codec/little-endian'
 
 function retryConnect(client: Client<Mc4ePacketFactory>, delayMs = 1000): void {
   setTimeout(async () => {
@@ -49,44 +49,77 @@ async function main(): Promise<void> {
     defaultTimeout: 1000,
   })
 
+  let initialized = false
+
   client.on('connected', async () => {
     console.log('connected')
 
-    const a = await client.read({
-      device: 'D',
-      start: 0,
-      length: 1,
-    })
-
-    if (a.code === 0) {
-      console.log('request frame:', uint8ToHex(a.options.frame))
-      console.log('response frame:', uint8ToHex(a.responseFrame!))
-      console.log('response data:', decodeInt16(a.data))
+    if (initialized) {
+      // 传输层会自动重连并再次触发 connected，这里避免重复注册订阅/定时器。
+      return
     }
+    initialized = true
 
-    client.subscribe({
-      device: 'D',
-      start: 0,
-      length: 2,
-      callback: (a) => {
-        if (a.code === 0) {
-          console.log('response data:', decodeFloat32(a.data))
-        }
-      },
-    })
+    try {
+      const a = await client.read({
+        device: 'D',
+        start: 0,
+        length: 1,
+      })
 
-    client.subscribe({
-      device: 'D',
-      start: 2,
-      length: 4,
-      callback: (a) => {
-        if (a.code === 0) {
-          console.log('response data:', decodeInt32(a.data))
-        }
-      },
-    })
+      if (a.code === 0) {
+        console.log('request frame:', uint8ToHex(a.options.frame))
+        console.log('response frame:', uint8ToHex(a.responseFrame!))
+        console.log('response data:', decodeInt16(a.data))
+      }
+
+      client.subscribe({
+        device: 'D',
+        start: 0,
+        length: 2,
+        callback: (a) => {
+          if (a.code === 0) {
+            console.log('response data:', decodeFloat32(a.data), '------------:' + Math.random())
+          }
+        },
+      })
+
+      client.subscribe({
+        device: 'D',
+        start: 200,
+        length: 4,
+        callback: (a) => {
+          if (a.code === 0) {
+            console.log('response data:', decodeInt32(a.data), '------------:' + Math.random())
+          }
+        },
+      })
+
+      setInterval(() => {
+        void (async () => {
+          try {
+            await client.write({
+              device: 'D',
+              start: 0,
+              value: encodeInt16(Math.floor(Math.random() * 100)),
+            })
+
+            await client.write({
+              device: 'D',
+              start: 200,
+              value: encodeInt16(Math.floor(Math.random() * 100)),
+            })
+          } catch (error) {
+            console.error('periodic write failed:', error)
+          }
+        })()
+      }, 100)
+    } catch (error) {
+      console.error('connected init failed:', error)
+    }
   })
   client.on('disconnected', () => console.log('disconnected'))
+  client.on('timeout', (err) => console.warn('timeout', err.message))
   client.on('error', (err) => console.error('error', err))
 
   try {

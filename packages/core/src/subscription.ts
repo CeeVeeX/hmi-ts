@@ -154,7 +154,13 @@ export class SubscriptionEngine<T extends PacketFactory> extends EventEmitter<
       try {
         await this.pollGroup(group)
       } catch (error) {
-        this.options.onError?.(error as Error)
+        const err = error as Error
+        // 订阅超时属于可恢复场景：仅提示并继续下一轮，避免把轮询判定为致命失败。
+        if (err.name === 'TimeoutError') {
+          console.warn(`[subscription] poll timeout in group(${group.interval}ms): ${err.message}`)
+        } else {
+          this.options.onError?.(err)
+        }
       }
 
       const delay = Math.max(0, nextTickAt - Date.now())
@@ -174,7 +180,19 @@ export class SubscriptionEngine<T extends PacketFactory> extends EventEmitter<
     for (const relation of group.relations) {
       const { range } = relation
       // frame 在内部生成，range 没有 frame 属性
-      const res = await this.options.read(range)
+      let res: IReadResponse<SubscribeOptions<T>>
+      try {
+        res = await this.options.read(range)
+      } catch (error) {
+        const err = error as Error
+        // 订阅读超时属于可恢复情况：记录后继续，不中断整个轮询链。
+        if (err.name === 'TimeoutError') {
+          console.warn(`[subscription] read timeout in relation, skip this tick: ${err.message}`)
+        } else {
+          this.options.onError?.(err)
+        }
+        continue
+      }
 
       if (res.code !== ResponseCode.SUCCESS) continue
 

@@ -76,7 +76,8 @@ export class Client<T extends PacketFactory<any, any>>
     options.transport.on('message', (data) => {
       try {
         if (!this.#inFlight) {
-          throw new Error('no inFlight request, but received a response')
+          // 超时后可能收到迟到响应，直接丢弃，避免把可恢复场景升级为错误。
+          return
         }
 
         // TCP 通过 transactionId 精确匹配；RTU/ASCII 由于串行上下文，使用当前 inFlight。
@@ -250,18 +251,26 @@ export class Client<T extends PacketFactory<any, any>>
     try {
       return await this.scheduler.schedule(task)
     } catch (error) {
+      const err = error as Error
+
       // 队列溢出：系统过载，建议降低请求速率或增加超时
       if (error instanceof QueueOverflowError) {
-        this.emit('error', error as Error)
+        this.emit('error', err)
       }
 
       // 调度器把超时作为普通异常抛出；这里统一转成客户端 timeout 事件，
       // 让上层既能捕获异常，也能通过事件做监控或告警。
-      if ((error as Error).name === 'TimeoutError') {
-        this.emit('timeout', error as Error)
+      if (err.name === 'TimeoutError') {
+        this.emit('timeout', err)
+        // scheduler 超时只会结束调度，不会自动清理客户端 inFlight。
+        // 若不清理，后续迟到响应会污染请求配对，导致轮询长期错位。
+        if (this.#inFlight && this.#inFlight.tk.id === task.id) {
+          this.#inFlight.reject(err)
+          this.#inFlight = null
+        }
       }
 
-      return Promise.reject(error)
+      return Promise.reject(err)
     }
   }
 
