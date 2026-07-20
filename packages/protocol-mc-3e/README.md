@@ -1,1 +1,1 @@
-# @hmi-ts/msg-mc-3e
+# @hmi-ts/protocol-mc-3e

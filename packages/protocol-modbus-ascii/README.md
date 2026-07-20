@@ -1,1 +1,1 @@
-# @hmi-ts/msg-modbus-ascii
+# @hmi-ts/protocol-modbus-ascii

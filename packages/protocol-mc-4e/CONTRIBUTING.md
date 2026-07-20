@@ -1,1 +1,1 @@
-# Contributing: @hmi-ts/msg-mc-4e
+# Contributing: @hmi-ts/protocol-mc-4e

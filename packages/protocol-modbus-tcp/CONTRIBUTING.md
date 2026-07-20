@@ -1,1 +1,1 @@
-# Contributing: @hmi-ts/msg-modbus-tcp
+# Contributing: @hmi-ts/protocol-modbus-tcp

@@ -1,1 +1,1 @@
-# @hmi-ts/msg-modbus-rtu
+# @hmi-ts/protocol-modbus-rtu
